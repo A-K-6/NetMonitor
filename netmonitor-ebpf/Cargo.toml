@@ -1,0 +1,15 @@
+[package]
+name = "netmonitor-ebpf"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aya-ebpf = "0.1"
+aya-log-ebpf = "0.1"
+netmonitor-common = { path = "../netmonitor-common" }
+
+[build-dependencies]
+# We'll need a build-script to compile the eBPF bytecode later
+# For now, this is a placeholder
