@@ -1,0 +1,11 @@
+[package]
+name = "netmonitor-common"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# aya-common is used to provide BPF-compatible types
+aya-obj = { version = "0.1", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
