@@ -1,0 +1,31 @@
+# Rust Build Artifacts
+target/
+
+# eBPF Intermediate Objects
+*.o
+*.ll
+*.bc
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# IDE & Editor specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Aya specific (if using certain templates)
+.aya-generated/
+
+# Packaging artifacts
+dist/
+*.deb
+*.rpm
