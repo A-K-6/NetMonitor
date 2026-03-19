@@ -4,7 +4,9 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 
 ## Phase 1: Foundation (Infrastructure & eBPF Core)
 *Goal: Establish the communication bridge between the Linux Kernel and Rust.*
-- [ ] **Environment Setup:** Configure the `aya` development environment (Rust + BPF toolchain).
+- [x] **Project Scaffolding:** Initialize Cargo workspace, documentation structure, and Git repository.
+- [ ] **Toolchain Configuration:** Setup `rust-toolchain.toml` for nightly/stable selection and install `bpf-linker`.
+- [ ] **eBPF Build System:** Implement an `xtask` or build script to automate eBPF compilation to `.o` files.
 - [ ] **Kernel Scaffolding:** Create the initial eBPF program with `kprobes` for `tcp_sendmsg` and `udp_sendmsg`.
 - [ ] **Data Pipeline:** Implement BPF Maps (Hash Maps) to store bandwidth stats per PID.
 - [ ] **Capability Management:** Implement the logic to verify `CAP_BPF` and `CAP_NET_ADMIN` at startup.
