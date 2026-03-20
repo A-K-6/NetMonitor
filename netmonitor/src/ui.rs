@@ -179,22 +179,75 @@ pub fn render(f: &mut Frame, app: &mut App) {
     if app.show_detail {
         if let Some(i) = app.table_state.selected() {
             if let Some(row) = app.process_data.get(i) {
-                let area = centered_rect(50, 40, size);
-                let text = vec![
+                let area = centered_rect(80, 70, size);
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(8), // Info
+                        Constraint::Min(0),    // Connections Table
+                        Constraint::Length(3), // Footer
+                    ])
+                    .split(area);
+
+                // Info Paragraph
+                let info_text = vec![
                     format!("PID:        {}", row.pid),
                     format!("Name:       {}", row.name),
                     "".to_string(),
                     format!("Upload:     {:.2} KB/s", row.up_bytes as f64 / 1024.0),
                     format!("Download:   {:.2} KB/s", row.down_bytes as f64 / 1024.0),
-                    format!("Total:      {:.2} KB", row.total_bytes as f64 / 1024.0),
-                    "".to_string(),
-                    "Press Enter to close".to_string(),
+                    format!("Total Size: {:.2} KB", row.total_bytes as f64 / 1024.0),
                 ].join("\n");
-                let detail = Paragraph::new(text)
-                    .block(Block::default().borders(Borders::ALL).title("Process Details").style(Style::default().fg(Color::Cyan)))
-                    .alignment(Alignment::Left);
+                let info = Paragraph::new(info_text)
+                    .block(Block::default().borders(Borders::ALL).title("Process Info").style(Style::default().fg(Color::Cyan)));
+
+                // Connections Table
+                let conns = app.connections.get(&row.pid);
+                let conn_header = Row::new(vec![
+                    Cell::from("PROTO"),
+                    Cell::from("LOCAL ADDR"),
+                    Cell::from("REMOTE ADDR"),
+                    Cell::from("UP (KB)"),
+                    Cell::from("DOWN (KB)"),
+                ]).style(Style::default().fg(Color::Blue)).height(1);
+
+                let conn_rows: Vec<Row> = match conns {
+                    Some(list) => list.iter().map(|c| {
+                        let proto = match c.proto {
+                            6 => "TCP",
+                            17 => "UDP",
+                            1 => "ICMP",
+                            _ => "RAW",
+                        };
+                        Row::new(vec![
+                            Cell::from(proto),
+                            Cell::from(format!("{}:{}", c.src_ip, c.src_port)),
+                            Cell::from(format!("{}:{}", c.dst_ip, c.dst_port)),
+                            Cell::from(Line::from(format!("{:.1}", c.up_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
+                            Cell::from(Line::from(format!("{:.1}", c.down_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
+                        ]).height(1)
+                    }).collect(),
+                    None => vec![Row::new(vec![Cell::from("No active connections detected").style(Style::default().fg(Color::DarkGray))])],
+                };
+
+                let conn_table = Table::new(conn_rows, [
+                    Constraint::Length(6),
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(15),
+                    Constraint::Percentage(15),
+                ])
+                .header(conn_header)
+                .block(Block::default().borders(Borders::ALL).title("Active Connections"));
+                
                 f.render_widget(Clear, area);
-                f.render_widget(detail, area);
+                f.render_widget(info, chunks[0]);
+                f.render_widget(conn_table, chunks[1]);
+
+                let footer = Paragraph::new("Press Enter to close")
+                    .alignment(Alignment::Center)
+                    .block(Block::default().borders(Borders::ALL));
+                f.render_widget(footer, chunks[2]);
             }
         }
     }

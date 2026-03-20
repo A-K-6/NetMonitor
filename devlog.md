@@ -1,3 +1,12 @@
+2026-03-20 07:00 - Completed Task 009: Socket Connection View.
+- Implemented per-connection traffic tracking in eBPF via a new `CONNECTIONS` LruHashMap.
+- Defined `ConnectionKey` and `ConnectionInfo` to store PID, Protocol, IP, and Port tuples.
+- Updated eBPF hooks (`tcp_sendmsg`, `tcp_cleanup_rbuf`, `udp_sendmsg`) to extract connection details from `struct sock`.
+- Enhanced userspace `App` to store and organize connection statistics by process ID.
+- Upgraded the "Process Detail" view in the TUI to include a sub-table of active network connections.
+- Successfully verified build for both eBPF and userspace components.
+- Updated `TECHNICAL_SPEC.md` to reflect new connection tracking maps and structures.
+
 2026-03-20 06:15 - Completed Task 008: Protocol Expansion (UDP & ICMP).
 - Expanded eBPF monitoring to include UDP and RAW/ICMP traffic for broader visibility.
 - Implemented `kprobe` for `udp_sendmsg` and `raw_sendmsg` to capture outbound data.
