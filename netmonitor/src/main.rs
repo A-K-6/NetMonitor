@@ -122,6 +122,44 @@ async fn main() -> Result<(), anyhow::Error> {
                         }
                         _ => {}
                     }
+                } else if app.show_alerts {
+                    match key.code {
+                        KeyCode::Esc | KeyCode::Char('A') | KeyCode::Char('q') => {
+                            app.show_alerts = false;
+                        }
+                        _ => {}
+                    }
+                } else if app.show_threshold_dialog {
+                    match key.code {
+                        KeyCode::Char(c) if c.is_digit(10) => {
+                            app.threshold_input.push(c);
+                        }
+                        KeyCode::Backspace => {
+                            app.threshold_input.pop();
+                        }
+                        KeyCode::Enter => {
+                            if let Some(i) = app.table_state.selected() {
+                                if let Some(row) = app.process_data.get(i) {
+                                    if let Ok(val) = app.threshold_input.parse::<u64>() {
+                                        if val > 0 {
+                                            app.thresholds.insert(row.pid, val);
+                                            app.status_message = Some(format!("Set threshold for {} to {} KB/s", row.name, val));
+                                        } else {
+                                            app.thresholds.remove(&row.pid);
+                                            app.status_message = Some(format!("Removed threshold for {}", row.name));
+                                        }
+                                    }
+                                }
+                            }
+                            app.show_threshold_dialog = false;
+                            app.threshold_input.clear();
+                        }
+                        KeyCode::Esc => {
+                            app.show_threshold_dialog = false;
+                            app.threshold_input.clear();
+                        }
+                        _ => {}
+                    }
                 } else if app.is_filtering {
                     match key.code {
                         KeyCode::Char(c) => {
@@ -228,6 +266,15 @@ async fn main() -> Result<(), anyhow::Error> {
                         KeyCode::Char('?') | KeyCode::Char('h') => {
                             app.show_help = true;
                         }
+                        KeyCode::Char('a') => {
+                            if app.table_state.selected().is_some() {
+                                app.show_threshold_dialog = true;
+                                app.threshold_input.clear();
+                            }
+                        }
+                        KeyCode::Char('A') => {
+                            app.show_alerts = !app.show_alerts;
+                        }
                         _ => {}
                     }
                 }
@@ -273,6 +320,25 @@ async fn main() -> Result<(), anyhow::Error> {
                     let entry = db_deltas.entry(pid).or_insert((0, 0));
                     entry.0 += up_delta;
                     entry.1 += down_delta;
+
+                    // Alert check
+                    if let Some(&threshold) = app.thresholds.get(&pid) {
+                        let current_rate = (up_delta + down_delta) / 1024; // KB/s (assuming 1Hz)
+                        if current_rate > threshold {
+                            let alert = app::Alert {
+                                timestamp: Utc::now(),
+                                pid,
+                                process_name: hist.name.clone(),
+                                value: current_rate,
+                                threshold,
+                            };
+                            app.alerts.push_back(alert);
+                            if app.alerts.len() > app::MAX_HISTORY {
+                                app.alerts.pop_front();
+                            }
+                            app.status_message = Some(format!("ALERT: {} exceeded threshold!", hist.name));
+                        }
+                    }
                 }
             }
 
