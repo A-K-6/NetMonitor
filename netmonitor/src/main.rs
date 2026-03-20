@@ -1,3 +1,5 @@
+mod process;
+
 use aya::maps::HashMap;
 use aya::programs::KProbe;
 use aya::Ebpf;
@@ -9,6 +11,7 @@ use std::time::Duration;
 use tokio::signal;
 use tokio::time;
 use log::{info, warn, error};
+use process::ProcessResolver;
 
 fn check_caps() -> Result<(), anyhow::Error> {
     let required = [Capability::CAP_BPF, Capability::CAP_NET_ADMIN];
@@ -59,6 +62,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.map_mut("TRAFFIC_STATS").unwrap())?;
 
     let mut interval = time::interval(Duration::from_secs(1));
+    let mut resolver = ProcessResolver::new(Duration::from_secs(10));
 
     info!("Waiting for Ctrl-C...");
 
@@ -68,7 +72,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 info!("--- Bandwidth Stats (per PID) ---");
                 for result in stats_map.iter() {
                     if let Ok((pid, stats)) = result {
-                        info!("PID: {} -> Sent: {} bytes ({} packets)", pid, stats.bytes_sent, stats.packets_sent);
+                        let name = resolver.get_process_name(pid);
+                        info!("[{}] ({}) -> Sent: {} bytes ({} packets)", name, pid, stats.bytes_sent, stats.packets_sent);
                     }
                 }
             }
