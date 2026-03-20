@@ -1,3 +1,15 @@
+2026-03-20 23:30 - Created Task 005: TUI Scaffolding (Ratatui MVP).
+- Proposed a plan to replace basic `info!` logging with a functional `Ratatui` terminal interface.
+- Outlined strategy for `App` state management and 1Hz UI refresh cycles.
+- Defined a multi-area layout (Header, Process Table, Footer) as per technical specifications.
+
+2026-03-20 23:10 - Completed Task 004: Process Resolver (/proc crawler).
+- Implemented `ProcessResolver` in `netmonitor` to map PIDs to human-readable names.
+- Manual parsing of `/proc/[pid]/comm` and `/proc/[pid]/cmdline` for lean binary footprint.
+- Implemented `HashMap` cache with 10-second TTL to handle PID recycling.
+- Updated userspace statistics loop to display `[process_name] (PID)` for better visibility.
+- Verified `ProcessResolver` with a new unit test for self-resolution.
+
 2026-03-20 22:20 - Completed Task 003: Capability Management & Embedded Bytecode.
 - Embedded eBPF bytecode into the userspace binary using `include_bytes!`.
 - Implemented `check_caps` function to verify `CAP_BPF` and `CAP_NET_ADMIN`.
