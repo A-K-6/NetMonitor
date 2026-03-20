@@ -18,17 +18,25 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Process Resolver:** Build a `/proc` crawler to map PIDs to human-readable application names.
 - [x] **TUI Scaffolding:** Initialize `Ratatui` with a basic layout (Header, Process Table, Footer).
 - [x] **Real-time Refresh:** Implement a 1Hz (or higher) refresh loop that pulls data from BPF maps.
-- [ ] **Sorting & Filtering:** Add ability to sort by "Upload"/"Download" and filter by process name.
-- [ ] **Cumulative Stats:** Track total data consumed since the application started.
-- [ ] **TUI Polish:** Make the UI more beautiful with advanced Ratatui widgets (e.g., Sparklines, Gauges, better borders and color themes).
+- [x] **Sorting & Filtering:** Add ability to sort by "Upload"/"Download" and filter by process name.
+- [x] **Cumulative Stats:** Track total data consumed since the application started.
+- [x] **TUI Polish:** Make the UI more beautiful with advanced Ratatui widgets (Sparklines, Alignment, Dialogs).
 
-## Phase 3: Advanced Features (Power-User Tools)
-*Goal: Add intelligence and control to the monitoring experience.*
-- [ ] **Protocol Identification:** Identify traffic by common ports (HTTPS, DNS, SSH, etc.).
-- [ ] **Geo-IP Integration:** Embed a MaxMind Lite database to map destination IPs to countries and ASNs.
-- [ ] **The "Kill-Switch":** Implement the `k` hotkey to send `SIGKILL` to a selected bandwidth-hogging process.
-- [ ] **Connection Deep-Dive:** Add a "Detail View" to see individual socket connections (IP:Port) for a specific process.
-- [ ] **Smart Alerts:** Implement a notification system for when a process exceeds a defined bandwidth threshold.
+## Phase 3: Advanced Power-User Features (Current)
+*Goal: Add intelligence, control, and deep-packet insights.*
+- [x] **The "Kill-Switch":** Implement the `k` hotkey to send `SIGKILL` to a selected bandwidth-hogging process.
+- [x] **Protocol Expansion:** Implement `udp_sendmsg` and `icmp` tracking to cover non-TCP traffic.
+- [ ] **Connection Deep-Dive:** Add a "Socket View" to see individual IP:Port connections for a specific PID.
+- [ ] **Reverse DNS Resolution:** Resolve destination IPs to hostnames (e.g., `172.217.16.14` -> `google.com`).
+- [ ] **Geo-IP & ASN Mapping:** Map IPs to countries and organizations (e.g., "Dublin, IE - Amazon.com").
+- [ ] **Protocol Heuristics:** Identify common traffic types (HTTPS, DNS, SSH, Bittorrent) based on port and pattern analysis.
+- [ ] **Traffic Persistence:** Save and reload session history to track bandwidth across app restarts.
+- [ ] **Smart Alerts:** System notifications for when a process exceeds a defined bandwidth threshold.
+- [ ] **Phase 3 TUI Final Polish:** 
+    - [ ] **Interactive Graphs:** Full-screen historical graph mode for specific processes.
+    - [ ] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
+    - [ ] **Help Overlay:** A dedicated `?` screen explaining all keybindings and features.
+    - [ ] **Mouse Support:** Basic click-to-select and scroll support for the process table.
 
 ## Phase 4: Stability & Documentation
 *Goal: Professional-grade packaging and rigorous documentation.*
@@ -47,4 +55,4 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
     - [ ] Create `.deb` package via `cargo-deb`.
     - [ ] Create AUR (Arch User Repository) PKGBUILD.
     - [ ] Provide static binaries for Linux via GitHub Actions.
-- [ ] **Initial Release (v0.1.0):** Tag the first stable release and publish it to GitHub and potentially `crates.io` (if applicable).
+- [ ] **Initial Release (v0.1.0):** Tag the first stable release and publish it to GitHub and potentially `crates.io`.

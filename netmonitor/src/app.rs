@@ -1,5 +1,7 @@
 use ratatui::widgets::TableState;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+
+pub const MAX_HISTORY: usize = 100;
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum Column {
@@ -30,9 +32,13 @@ pub struct App {
     pub sort_desc: bool,
     pub is_running: bool,
     pub show_kill_dialog: bool,
+    pub show_detail: bool,
     pub filter_text: String,
     pub is_filtering: bool,
+    pub status_message: Option<String>,
     pub process_history: HashMap<u32, ProcessRow>,
+    pub history_up: VecDeque<u64>,
+    pub history_down: VecDeque<u64>,
 }
 
 impl App {
@@ -46,9 +52,13 @@ impl App {
             sort_desc: true,
             is_running: true,
             show_kill_dialog: false,
+            show_detail: false,
             filter_text: String::new(),
             is_filtering: false,
+            status_message: None,
             process_history: HashMap::new(),
+            history_up: VecDeque::with_capacity(MAX_HISTORY),
+            history_down: VecDeque::with_capacity(MAX_HISTORY),
         }
     }
 

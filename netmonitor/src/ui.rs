@@ -2,7 +2,8 @@ use crate::app::{App, Column};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect, Alignment},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear},
+    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear, Sparkline},
+    text::Line,
     Frame,
 };
 
@@ -18,20 +19,45 @@ pub fn render(f: &mut Frame, app: &mut App) {
         ])
         .split(size);
 
-    // Header
+    // Header Area
+    let header_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(40), // Info
+            Constraint::Percentage(30), // Up Sparkline
+            Constraint::Percentage(30), // Down Sparkline
+        ])
+        .split(chunks[0]);
+
+    // Header Info
     let up_kbs = app.total_upload as f64 / 1024.0;
     let down_kbs = app.total_download as f64 / 1024.0;
     
     let header_text = format!(
-        "UP: {:.2} KB/s | DOWN: {:.2} KB/s | Kernel: eBPF CO-RE",
+        "UP: {:.1} KB/s | DOWN: {:.1} KB/s",
         up_kbs, down_kbs
     );
 
-    let header = Paragraph::new(header_text)
+    let header_info = Paragraph::new(header_text)
         .style(Style::default().fg(Color::Cyan))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL).title("NetMonitor"));
-    f.render_widget(header, chunks[0]);
+        .alignment(Alignment::Left)
+        .block(Block::default().borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM).title("NetMonitor"));
+    f.render_widget(header_info, header_chunks[0]);
+
+    // Sparklines
+    let up_data: Vec<u64> = app.history_up.iter().cloned().collect();
+    let sparkline_up = Sparkline::default()
+        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM).title("Upload"))
+        .data(&up_data)
+        .style(Style::default().fg(Color::Green));
+    f.render_widget(sparkline_up, header_chunks[1]);
+
+    let down_data: Vec<u64> = app.history_down.iter().cloned().collect();
+    let sparkline_down = Sparkline::default()
+        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT).title("Download"))
+        .data(&down_data)
+        .style(Style::default().fg(Color::Yellow));
+    f.render_widget(sparkline_down, header_chunks[2]);
 
     // Main Content
     let main_chunks = Layout::default()
@@ -70,7 +96,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
             if app.sort_column == col {
                 text.insert_str(0, if app.sort_desc { "↓ " } else { "↑ " });
             }
-            Cell::from(text).style(Style::default().fg(Color::Blue))
+            if i >= 2 {
+                Cell::from(Line::from(text).alignment(Alignment::Right)).style(Style::default().fg(Color::Blue))
+            } else {
+                Cell::from(text).style(Style::default().fg(Color::Blue))
+            }
         });
     let table_header = Row::new(header_cells)
         .style(normal_style)
@@ -85,9 +115,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
         let cells = vec![
             Cell::from(item.pid.to_string()),
             Cell::from(item.name.clone()),
-            Cell::from(format!("{:.2}", up)).style(Style::default().fg(Color::Green)),
-            Cell::from(format!("{:.2}", down)).style(Style::default().fg(Color::Yellow)),
-            Cell::from(format!("{:.2}", total)),
+            Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(Style::default().fg(Color::Green)),
+            Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(Style::default().fg(Color::Yellow)),
+            Cell::from(Line::from(format!("{:.2}", total)).alignment(Alignment::Right)),
         ];
         Row::new(cells).height(1).bottom_margin(0)
     }).collect();
@@ -121,9 +151,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     // Footer
     let footer_text = if app.is_filtering {
-        "Type to filter | Enter/Esc: Finish"
+        "Type to filter | Enter/Esc: Finish".to_string()
+    } else if let Some(msg) = &app.status_message {
+        format!("STATUS: {} | Press any key to clear", msg)
     } else {
-        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Deep-dive"
+        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details".to_string()
     };
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(Color::DarkGray))
@@ -135,12 +167,36 @@ pub fn render(f: &mut Frame, app: &mut App) {
     if app.show_kill_dialog {
         let area = centered_rect(60, 20, size);
         let pid_to_kill = app.table_state.selected().and_then(|i| app.process_data.get(i)).map(|p| p.pid);
-        let text = format!("Are you sure you want to kill PID {:?}? (y/n)", pid_to_kill);
+        let text = format!("\nAre you sure you want to kill PID {:?}?\n\n(y)es / (n)o", pid_to_kill);
         let dialog = Paragraph::new(text)
             .block(Block::default().borders(Borders::ALL).title("Confirm Kill").style(Style::default().fg(Color::Red)))
             .alignment(Alignment::Center);
         f.render_widget(Clear, area);
         f.render_widget(dialog, area);
+    }
+
+    // Detail View
+    if app.show_detail {
+        if let Some(i) = app.table_state.selected() {
+            if let Some(row) = app.process_data.get(i) {
+                let area = centered_rect(50, 40, size);
+                let text = vec![
+                    format!("PID:        {}", row.pid),
+                    format!("Name:       {}", row.name),
+                    "".to_string(),
+                    format!("Upload:     {:.2} KB/s", row.up_bytes as f64 / 1024.0),
+                    format!("Download:   {:.2} KB/s", row.down_bytes as f64 / 1024.0),
+                    format!("Total:      {:.2} KB", row.total_bytes as f64 / 1024.0),
+                    "".to_string(),
+                    "Press Enter to close".to_string(),
+                ].join("\n");
+                let detail = Paragraph::new(text)
+                    .block(Block::default().borders(Borders::ALL).title("Process Details").style(Style::default().fg(Color::Cyan)))
+                    .alignment(Alignment::Left);
+                f.render_widget(Clear, area);
+                f.render_widget(detail, area);
+            }
+        }
     }
 }
 

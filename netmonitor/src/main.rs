@@ -59,6 +59,24 @@ async fn main() -> Result<(), anyhow::Error> {
     recv_program.load()?;
     recv_program.attach("tcp_cleanup_rbuf", 0)?;
 
+    // Load UDP probes
+    let udp_send: &mut KProbe = bpf.program_mut("udp_sendmsg").expect("udp_sendmsg not found").try_into()?;
+    udp_send.load()?;
+    udp_send.attach("udp_sendmsg", 0)?;
+
+    let udp_recv: &mut KProbe = bpf.program_mut("udp_recvmsg").expect("udp_recvmsg not found").try_into()?;
+    udp_recv.load()?;
+    udp_recv.attach("udp_recvmsg", 0)?;
+
+    // Load RAW probes
+    let raw_send: &mut KProbe = bpf.program_mut("raw_sendmsg").expect("raw_sendmsg not found").try_into()?;
+    raw_send.load()?;
+    raw_send.attach("raw_sendmsg", 0)?;
+
+    let raw_recv: &mut KProbe = bpf.program_mut("raw_recvmsg").expect("raw_recvmsg not found").try_into()?;
+    raw_recv.load()?;
+    raw_recv.attach("raw_recvmsg", 0)?;
+
     let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.map_mut("TRAFFIC_STATS").unwrap())?;
 
     let mut resolver = ProcessResolver::new(Duration::from_secs(10));
@@ -77,6 +95,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
         if let Some(event) = terminal.handle_events(timeout)? {
             if let Event::Key(key) = event {
+                // Clear status message on any key press
+                app.status_message = None;
+
                 if app.is_filtering {
                     match key.code {
                         KeyCode::Char(c) => {
@@ -94,8 +115,14 @@ async fn main() -> Result<(), anyhow::Error> {
                     match key.code {
                         KeyCode::Char('y') => {
                             if let Some(i) = app.table_state.selected() {
-                                if let Some(_row) = app.process_data.get(i) {
-                                    // Simulated kill
+                                if let Some(row) = app.process_data.get(i) {
+                                    unsafe {
+                                        if libc::kill(row.pid as libc::pid_t, libc::SIGKILL) == 0 {
+                                            app.status_message = Some(format!("Killed PID {}", row.pid));
+                                        } else {
+                                            app.status_message = Some(format!("Failed to kill PID {}", row.pid));
+                                        }
+                                    }
                                 }
                             }
                             app.show_kill_dialog = false;
@@ -118,7 +145,14 @@ async fn main() -> Result<(), anyhow::Error> {
                         }
                         KeyCode::Down => app.next(),
                         KeyCode::Up => app.previous(),
-                        KeyCode::Char('k') => app.show_kill_dialog = true,
+                        KeyCode::Enter => {
+                            app.show_detail = !app.show_detail;
+                        }
+                        KeyCode::Char('k') => {
+                            if app.table_state.selected().is_some() {
+                                app.show_kill_dialog = true;
+                            }
+                        }
                         KeyCode::Char('s') => {
                             // Cycle sort columns
                             let next_col = match app.sort_column {
@@ -190,8 +224,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
             app.total_upload = current_total_up;
             app.total_download = current_total_down;
-            app.sort_data();
 
+            // Update global history
+            app.history_up.push_back(current_total_up);
+            app.history_down.push_back(current_total_down);
+            if app.history_up.len() > app::MAX_HISTORY {
+                app.history_up.pop_front();
+                app.history_down.pop_front();
+            }
+
+            app.sort_data();
             last_tick = Instant::now();
         }
     }

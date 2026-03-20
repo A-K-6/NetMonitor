@@ -11,14 +11,18 @@ NetMonitor uses **Aya**, a library that allows writing both the userspace and th
 To track per-process bandwidth, we hook into the following kernel functions:
 
 ### 2.1. Transmission (Egress)
-- **Hook:** `kprobe:tcp_sendmsg` and `kprobe:udp_sendmsg`
+- **TCP:** `kprobe:tcp_sendmsg`
+- **UDP:** `kprobe:udp_sendmsg`
+- **RAW/ICMP:** `kprobe:raw_sendmsg`
 - **Data Collected:** 
     - `pid`: Process ID (via `bpf_get_current_pid_tgid()`)
     - `bytes`: Number of bytes being sent.
 - **Logic:** Increments the total "sent" count for the given PID in a BPF Map.
 
 ### 2.2. Reception (Ingress)
-- **Hook:** `fentry:tcp_cleanup_rbuf` (or `kprobe:tcp_recvmsg` as fallback)
+- **TCP:** `kprobe:tcp_cleanup_rbuf`
+- **UDP:** `kretprobe:udp_recvmsg`
+- **RAW/ICMP:** `kretprobe:raw_recvmsg`
 - **Data Collected:**
     - `pid`: Process ID.
     - `bytes`: Number of bytes received/cleared from the buffer.
@@ -27,18 +31,19 @@ To track per-process bandwidth, we hook into the following kernel functions:
 ## 3. BPF Maps
 Maps are used for kernel-to-user communication.
 
-### 3.1. `PROCESS_STATS` (HashMap)
+### 3.1. `TRAFFIC_STATS` (HashMap)
 - **Key:** `u32` (PID)
-- **Value:** `struct BandwidthStats`
+- **Value:** `struct TrafficStats`
     ```rust
     #[repr(C)]
-    struct BandwidthStats {
-        bytes_sent: u64,
-        bytes_recv: u64,
-        last_updated: u64,
+    pub struct TrafficStats {
+        pub bytes_sent: u64,
+        pub packets_sent: u64,
+        pub bytes_recv: u64,
+        pub packets_recv: u64,
     }
     ```
-- **Type:** `BPF_MAP_TYPE_LRU_HASH` (to prevent memory exhaustion from short-lived PIDs).
+- **Type:** `BPF_MAP_TYPE_HASH` (with max entries 1024).
 
 ## 4. CO-RE (Compile Once – Run Everywhere)
 - **Mechanism:** Aya uses BTF (BPF Type Format) to automatically adjust field offsets based on the target kernel version.
