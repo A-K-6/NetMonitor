@@ -1,3 +1,11 @@
+2026-03-20 08:30 - Completed Task 011: Geo-IP & ASN Mapping.
+- Integrated `maxminddb` for destination IP address to country/organization mapping.
+- Implemented `GeoResolver` with a fallback mechanism and `include_bytes!` embedding.
+- Updated `ConnectionInfo` to include `country` and `isp` fields.
+- Enhanced the "Connection Table" in the TUI Detail View with new "GEO" and "ISP" columns.
+- Added unit tests to verify Geo-IP fallback logic and build integrity.
+- Updated `PRD.md` with database update instructions and status markers.
+
 2026-03-20 07:00 - Completed Task 009: Socket Connection View.
 - Implemented per-connection traffic tracking in eBPF via a new `CONNECTIONS` LruHashMap.
 - Defined `ConnectionKey` and `ConnectionInfo` to store PID, Protocol, IP, and Port tuples.

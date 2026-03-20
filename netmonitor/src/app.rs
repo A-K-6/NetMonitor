@@ -32,6 +32,8 @@ pub struct ConnectionInfo {
     pub dst_port: u16,
     pub up_bytes: u64,
     pub down_bytes: u64,
+    pub country: String,
+    pub isp: String,
 }
 
 pub struct App {
