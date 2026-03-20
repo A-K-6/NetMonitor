@@ -30,7 +30,7 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Reverse DNS Resolution:** Resolve destination IPs to hostnames (e.g., `172.217.16.14` -> `google.com`).
 - [x] **Geo-IP & ASN Mapping:** Map IPs to countries and organizations (e.g., "Dublin, IE - Amazon.com").
 - [x] **Protocol Heuristics:** Identify common traffic types (HTTPS, DNS, SSH, Bittorrent) based on port and pattern analysis.
-- [ ] **Traffic Persistence:** Save and reload session history to track bandwidth across app restarts.
+- [x] **Traffic Persistence:** Save and reload session history to track bandwidth across app restarts.
 - [ ] **Smart Alerts:** System notifications for when a process exceeds a defined bandwidth threshold.
 - [ ] **Phase 3 TUI Final Polish:** 
     - [ ] **Interactive Graphs:** Full-screen historical graph mode for specific processes.

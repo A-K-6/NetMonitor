@@ -66,3 +66,26 @@ NetMonitor uses an event-driven model:
 - **Timer Events:** Trigger UI refreshes and BPF map polling (default 1Hz).
 - **Key Events:** Handle user interactions (sorting, navigation, killing).
 - **Resize Events:** Recalculate UI layout for the new terminal dimensions.
+
+## 5. Data Persistence & SQLite
+To provide historical analysis and maintain statistics across application restarts, NetMonitor integrates a local **SQLite** database.
+
+### 5.1. Database Schema
+- **`processes` Table:** Stores cumulative statistics for each process identified by PID.
+    - `pid`: INTEGER (Primary Key)
+    - `name`: TEXT
+    - `first_seen`: DATETIME
+    - `last_seen`: DATETIME
+    - `total_up`: INTEGER
+    - `total_down`: INTEGER
+- **`traffic_log` Table:** Stores time-series data for bandwidth usage.
+    - `pid`: INTEGER (Foreign Key)
+    - `timestamp`: DATETIME
+    - `up_bytes`: INTEGER
+    - `down_bytes`: INTEGER
+
+### 5.2. Persistence Strategy
+- **Startup:** Load cumulative `total_up` and `total_down` from the `processes` table to pre-populate the `App` state.
+- **Periodic Flush:** Every 60 seconds, the userspace application flushes accumulated deltas to the database in a single transaction.
+- **Shutdown:** A final flush is performed when the application receives a termination signal (`q` or `Ctrl+C`) to ensure no data loss.
+- **Storage:** The database is stored in a local file (`netmonitor.db`) in the application's working directory.

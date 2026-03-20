@@ -58,7 +58,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(historical_data: HashMap<u32, ProcessRow>) -> Self {
         Self {
             process_data: Vec::new(),
             total_upload: 0,
@@ -72,7 +72,7 @@ impl App {
             filter_text: String::new(),
             is_filtering: false,
             status_message: None,
-            process_history: HashMap::new(),
+            process_history: historical_data,
             history_up: VecDeque::with_capacity(MAX_HISTORY),
             history_down: VecDeque::with_capacity(MAX_HISTORY),
             connections: HashMap::new(),

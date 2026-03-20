@@ -5,6 +5,7 @@ mod ui;
 mod geoip;
 mod protocol;
 mod dns;
+mod db;
 
 use app::{App, Column, ProcessRow};
 use aya::maps::HashMap;
@@ -17,7 +18,8 @@ use netmonitor_common::{TrafficStats, ConnectionKey};
 use process::ProcessResolver;
 use std::env;
 use std::time::{Duration, Instant};
-use log::error;
+use log::{error, info};
+use db::DbManager;
 
 fn check_caps() -> Result<(), anyhow::Error> {
     let required = [Capability::CAP_BPF, Capability::CAP_NET_ADMIN];
@@ -79,27 +81,37 @@ async fn main() -> Result<(), anyhow::Error> {
     let raw_recv: &mut KProbe = bpf.program_mut("raw_recvmsg").expect("raw_recvmsg not found").try_into()?;
     raw_recv.load()?;
     raw_recv.attach("raw_recvmsg", 0)?;
+let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.take_map("TRAFFIC_STATS").unwrap())?;
+let connections_map: HashMap<_, ConnectionKey, TrafficStats> = 
+    HashMap::try_from(bpf.take_map("CONNECTIONS").unwrap())?;
 
-    let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.take_map("TRAFFIC_STATS").unwrap())?;
-    let connections_map: HashMap<_, ConnectionKey, TrafficStats> = 
-        HashMap::try_from(bpf.take_map("CONNECTIONS").unwrap())?;
+let mut db = DbManager::new("netmonitor.db")?;
+let historical_data = db.load_historical_stats()?;
+info!("Loaded historical stats for {} processes", historical_data.len());
 
-    let mut resolver = ProcessResolver::new(Duration::from_secs(10));
-    let mut terminal = tui::Tui::new()?;
-    let mut app = App::new();
+let mut resolver = ProcessResolver::new(Duration::from_secs(10));
+let mut terminal = tui::Tui::new()?;
+let mut app = App::new(historical_data);
 
-    let mut last_tick = Instant::now();
-    let tick_rate = Duration::from_millis(1000);
+let mut last_tick = Instant::now();
+let mut last_db_flush = Instant::now();
+let tick_rate = Duration::from_millis(1000);
+let db_flush_rate = Duration::from_secs(60);
 
-    while app.is_running {
-        terminal.draw(|f| ui::render(f, &mut app))?;
+// Track deltas for DB flushing
+let mut db_deltas: std::collections::HashMap<u32, (u64, u64)> = std::collections::HashMap::new();
 
-        let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
-            .unwrap_or_else(|| Duration::from_secs(0));
+while app.is_running {
+    terminal.draw(|f| ui::render(f, &mut app))?;
 
-        if let Some(event) = terminal.handle_events(timeout)? {
-            if let Event::Key(key) = event {
+    let timeout = tick_rate
+        .checked_sub(last_tick.elapsed())
+        .unwrap_or_else(|| Duration::from_secs(0));
+
+    if let Some(event) = terminal.handle_events(timeout)? {
+        if let Event::Key(key) = event {
+            // ... (keyboard handling)
+
                 // Clear status message on any key press
                 app.status_message = None;
 
@@ -202,14 +214,36 @@ async fn main() -> Result<(), anyhow::Error> {
 
                     hist.up_bytes = up_delta;
                     hist.down_bytes = down_delta;
-                    hist.total_bytes = stats.bytes_sent + stats.bytes_recv;
+                    hist.total_bytes += up_delta + down_delta;
                     
                     hist.last_up_bytes = stats.bytes_sent;
                     hist.last_down_bytes = stats.bytes_recv;
 
                     current_total_up += up_delta;
                     current_total_down += down_delta;
+
+                    // Update deltas for DB
+                    let entry = db_deltas.entry(pid).or_insert((0, 0));
+                    entry.0 += up_delta;
+                    entry.1 += down_delta;
                 }
+            }
+
+            // Periodic DB Flush
+            if last_db_flush.elapsed() >= db_flush_rate {
+                let mut batch = Vec::new();
+                for (pid, (up, down)) in db_deltas.drain() {
+                    if up > 0 || down > 0 {
+                        let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
+                        batch.push((pid, name, up, down));
+                    }
+                }
+                if !batch.is_empty() {
+                    if let Err(e) = db.flush_batch(&batch) {
+                        error!("Failed to flush to DB: {}", e);
+                    }
+                }
+                last_db_flush = Instant::now();
             }
 
             // Update connections
@@ -277,6 +311,22 @@ async fn main() -> Result<(), anyhow::Error> {
 
             app.sort_data();
             last_tick = Instant::now();
+        }
+    }
+
+    // Final DB Flush
+    let mut batch = Vec::new();
+    for (pid, (up, down)) in db_deltas.drain() {
+        if up > 0 || down > 0 {
+            let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
+            batch.push((pid, name, up, down));
+        }
+    }
+    if !batch.is_empty() {
+        if let Err(e) = db.flush_batch(&batch) {
+            error!("Final DB flush failed: {}", e);
+        } else {
+            info!("Final DB flush completed");
         }
     }
 
