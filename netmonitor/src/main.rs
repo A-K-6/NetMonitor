@@ -10,7 +10,7 @@ use aya::Ebpf;
 use aya_log::EbpfLogger;
 use caps::{CapSet, Capability, has_cap};
 use crossterm::event::{Event, KeyCode, KeyModifiers};
-use netmonitor_common::TrafficStats;
+use netmonitor_common::{TrafficStats, ConnectionKey};
 use process::ProcessResolver;
 use std::env;
 use std::time::{Duration, Instant};
@@ -77,7 +77,9 @@ async fn main() -> Result<(), anyhow::Error> {
     raw_recv.load()?;
     raw_recv.attach("raw_recvmsg", 0)?;
 
-    let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.map_mut("TRAFFIC_STATS").unwrap())?;
+    let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.take_map("TRAFFIC_STATS").unwrap())?;
+    let connections_map: HashMap<_, ConnectionKey, TrafficStats> = 
+        HashMap::try_from(bpf.take_map("CONNECTIONS").unwrap())?;
 
     let mut resolver = ProcessResolver::new(Duration::from_secs(10));
     let mut terminal = tui::Tui::new()?;
@@ -174,7 +176,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let mut current_total_up = 0;
             let mut current_total_down = 0;
 
-            // 1. Update history with latest from BPF map
+            // Update stats
             for result in stats_map.iter() {
                 if let Ok((pid, stats)) = result {
                     let name = resolver.get_process_name(pid);
@@ -188,13 +190,10 @@ async fn main() -> Result<(), anyhow::Error> {
                         last_down_bytes: 0,
                     });
 
-                    // Ensure name is up to date (it might change from "unknown" to something else)
                     if hist.name == "unknown" && name != "unknown" {
                         hist.name = name;
                     }
 
-                    // Calculate deltas (rates)
-                    // If eBPF values are total since start, delta is current - last
                     let up_delta = stats.bytes_sent.saturating_sub(hist.last_up_bytes);
                     let down_delta = stats.bytes_recv.saturating_sub(hist.last_down_bytes);
 
@@ -207,6 +206,27 @@ async fn main() -> Result<(), anyhow::Error> {
 
                     current_total_up += up_delta;
                     current_total_down += down_delta;
+                }
+            }
+
+            // Update connections
+            app.connections.clear();
+            for result in connections_map.iter() {
+                if let Ok((key, stats)) = result {
+                    use std::net::Ipv4Addr;
+                    let src_ip = Ipv4Addr::from(u32::from_be(key.src_ip)).to_string();
+                    let dst_ip = Ipv4Addr::from(u32::from_be(key.dst_ip)).to_string();
+                    
+                    let conn_info = app::ConnectionInfo {
+                        proto: key.proto,
+                        src_ip,
+                        src_port: key.src_port,
+                        dst_ip,
+                        dst_port: key.dst_port,
+                        up_bytes: stats.bytes_sent,
+                        down_bytes: stats.bytes_recv,
+                    };
+                    app.connections.entry(key.pid).or_default().push(conn_info);
                 }
             }
 

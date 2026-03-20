@@ -45,6 +45,23 @@ Maps are used for kernel-to-user communication.
     ```
 - **Type:** `BPF_MAP_TYPE_HASH` (with max entries 1024).
 
+### 3.2. `CONNECTIONS` (LruHashMap)
+- **Key:** `struct ConnectionKey`
+    ```rust
+    #[repr(C)]
+    pub struct ConnectionKey {
+        pub pid: u32,
+        pub proto: u32,
+        pub src_ip: u32,
+        pub dst_ip: u32,
+        pub src_port: u16,
+        pub dst_port: u16,
+    }
+    ```
+- **Value:** `struct TrafficStats`
+- **Type:** `BPF_MAP_TYPE_LRU_HASH` (with max entries 10000).
+- **Purpose:** Tracks per-connection bandwidth for detailed view.
+
 ## 4. CO-RE (Compile Once – Run Everywhere)
 - **Mechanism:** Aya uses BTF (BPF Type Format) to automatically adjust field offsets based on the target kernel version.
 - **Requirement:** The target system must have `/sys/kernel/btf/vmlinux` or a provided BTF file.

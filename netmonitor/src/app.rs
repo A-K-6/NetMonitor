@@ -23,6 +23,17 @@ pub struct ProcessRow {
     pub last_down_bytes: u64,
 }
 
+#[derive(Clone)]
+pub struct ConnectionInfo {
+    pub proto: u32,
+    pub src_ip: String,
+    pub src_port: u16,
+    pub dst_ip: String,
+    pub dst_port: u16,
+    pub up_bytes: u64,
+    pub down_bytes: u64,
+}
+
 pub struct App {
     pub process_data: Vec<ProcessRow>,
     pub total_upload: u64,
@@ -39,6 +50,7 @@ pub struct App {
     pub process_history: HashMap<u32, ProcessRow>,
     pub history_up: VecDeque<u64>,
     pub history_down: VecDeque<u64>,
+    pub connections: HashMap<u32, Vec<ConnectionInfo>>, // PID -> List of connections
 }
 
 impl App {
@@ -59,6 +71,7 @@ impl App {
             process_history: HashMap::new(),
             history_up: VecDeque::with_capacity(MAX_HISTORY),
             history_down: VecDeque::with_capacity(MAX_HISTORY),
+            connections: HashMap::new(),
         }
     }
 
