@@ -34,13 +34,19 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let up_kbs = app.total_upload as f64 / 1024.0;
     let down_kbs = app.total_download as f64 / 1024.0;
     
-    let header_text = format!(
+    let mut header_text = format!(
         "UP: {:.1} KB/s | DOWN: {:.1} KB/s",
         up_kbs, down_kbs
     );
 
+    if !app.alerts.is_empty() {
+        if let Some(last) = app.alerts.back() {
+            header_text.push_str(&format!(" | ALERT: {} ({}) > {} KB/s", last.process_name, last.pid, last.threshold));
+        }
+    }
+
     let header_info = Paragraph::new(header_text)
-        .style(Style::default().fg(Color::Cyan))
+        .style(if !app.alerts.is_empty() { Style::default().fg(Color::Red) } else { Style::default().fg(Color::Cyan) })
         .alignment(Alignment::Left)
         .block(Block::default().borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM).title("NetMonitor"));
     f.render_widget(header_info, header_chunks[0]);
@@ -113,12 +119,21 @@ pub fn render(f: &mut Frame, app: &mut App) {
         let down = item.down_bytes as f64 / 1024.0;
         let total = item.total_bytes as f64 / 1024.0;
 
+        let threshold = app.thresholds.get(&item.pid);
+        let exceeded = threshold.map_or(false, |&t| (up + down) > t as f64);
+
+        let base_style = if exceeded {
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
         let cells = vec![
-            Cell::from(item.pid.to_string()),
-            Cell::from(item.name.clone()),
-            Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(Style::default().fg(Color::Green)),
-            Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(Style::default().fg(Color::Yellow)),
-            Cell::from(Line::from(format!("{:.2}", total)).alignment(Alignment::Right)),
+            Cell::from(item.pid.to_string()).style(base_style),
+            Cell::from(item.name.clone()).style(base_style),
+            Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(Color::Green) }),
+            Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(Color::Yellow) }),
+            Cell::from(Line::from(format!("{:.2}", total)).alignment(Alignment::Right)).style(base_style),
         ];
         Row::new(cells).height(1).bottom_margin(0)
     }).collect();
@@ -155,10 +170,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
         "Type to filter | Enter/Esc: Finish".to_string()
     } else if app.show_graph {
         format!("Tab: Cycle Range ({}) | g/Esc: Close", app.graph_time_range.label())
+    } else if app.show_threshold_dialog {
+        "Enter: Set Threshold (KB/s) | Esc: Cancel".to_string()
     } else if let Some(msg) = &app.status_message {
         format!("STATUS: {} | Press any key to clear", msg)
     } else {
-        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | ?: Help".to_string()
+        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | a: Alert | A: Alerts | ?: Help".to_string()
     };
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(Color::DarkGray))
@@ -278,15 +295,63 @@ pub fn render(f: &mut Frame, app: &mut App) {
     if app.show_help {
         render_help_overlay(f, size);
     }
+
+    // Threshold Dialog
+    if app.show_threshold_dialog {
+        let area = centered_rect(40, 20, size);
+        let pid = app.table_state.selected().and_then(|i| app.process_data.get(i)).map(|p| p.pid);
+        let text = format!("\nSet bandwidth threshold for PID {:?} (KB/s):\n\n {}_ ", pid, app.threshold_input);
+        let dialog = Paragraph::new(text)
+            .block(Block::default().borders(Borders::ALL).title("Set Threshold").style(Style::default().fg(Color::Yellow)))
+            .alignment(Alignment::Center);
+        f.render_widget(Clear, area);
+        f.render_widget(dialog, area);
+    }
+
+    // Alerts Overlay
+    if app.show_alerts {
+         render_alerts_overlay(f, app, size);
+    }
+}
+
+fn render_alerts_overlay(f: &mut Frame, app: &App, size: Rect) {
+    let area = centered_rect(80, 80, size);
+    f.render_widget(Clear, area);
+
+    let rows: Vec<Row> = app.alerts.iter().rev().map(|a| {
+        Row::new(vec![
+            Cell::from(a.timestamp.format("%H:%M:%S").to_string()),
+            Cell::from(a.pid.to_string()),
+            Cell::from(a.process_name.clone()),
+            Cell::from(format!("{} KB/s", a.value)),
+            Cell::from(format!("{} KB/s", a.threshold)),
+        ])
+    }).collect();
+
+    let table = Table::new(rows, [
+        Constraint::Percentage(20),
+        Constraint::Percentage(10),
+        Constraint::Percentage(30),
+        Constraint::Percentage(20),
+        Constraint::Percentage(20),
+    ])
+    .header(Row::new(vec!["Time", "PID", "Process", "Value", "Threshold"])
+        .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Red))
+        .bottom_margin(1))
+    .block(Block::default().borders(Borders::ALL).title(" Recent Alerts (Press A or Esc to close) "));
+
+    f.render_widget(table, area);
 }
 
 fn render_help_overlay(f: &mut Frame, size: Rect) {
-    let area = centered_rect(60, 60, size);
+    let area = centered_rect(60, 65, size);
     f.render_widget(Clear, area);
 
     let help_text = vec![
         Row::new(vec![Cell::from("q / Esc"), Cell::from("Quit / Back")]),
         Row::new(vec![Cell::from("k"), Cell::from("Kill selected process")]),
+        Row::new(vec![Cell::from("a"), Cell::from("Set bandwidth threshold for selected process")]),
+        Row::new(vec![Cell::from("A"), Cell::from("View recent alerts log")]),
         Row::new(vec![Cell::from("s"), Cell::from("Cycle sort column (Pid -> Name -> Up -> Down -> Total)")]),
         Row::new(vec![Cell::from("/"), Cell::from("Filter by process name")]),
         Row::new(vec![Cell::from("Enter"), Cell::from("Deep-dive into process connections")]),

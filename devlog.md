@@ -1,3 +1,18 @@
+2026-03-20 14:10 - Proposed Task 017: Custom Themes & Theme Selector.
+- Created `docs/ideas/todo/017-custom-themes.md`.
+- Planned implementation of a theme engine with preset color schemes (Default, Dracula, Solarized).
+- Planned UI enhancement for a theme selection dialog (hotkey `t`).
+- Planned decoupling of hardcoded colors from the rendering pipeline.
+
+2026-03-20 14:00 - Completed Task 016: Smart Bandwidth Alerts & Thresholds.
+- Added `Alert` struct and `thresholds`, `alerts` to `App` state.
+- Implemented PID-based bandwidth thresholding in the 1Hz update loop.
+- Added interactive "Set Threshold" dialog (hotkey `a`) for per-process limits.
+- Implemented "Alerts Log" overlay (hotkey `A`) to view recent threshold violations.
+- Updated main process table to highlight rows exceeding their thresholds in Red.
+- Integrated alert notifications into the header and status bar.
+- Verified logic via `cargo check`.
+
 2026-03-20 13:10 - Proposed Task 016: Smart Bandwidth Alerts & Thresholds.
 - Created `docs/ideas/todo/016-smart-alerts.md`.
 - Planned implementation of PID-based bandwidth thresholds (KB/s).

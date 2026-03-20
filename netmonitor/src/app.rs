@@ -38,6 +38,15 @@ pub struct ConnectionInfo {
     pub service: String,
 }
 
+#[derive(Clone)]
+pub struct Alert {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub pid: u32,
+    pub process_name: String,
+    pub value: u64, // KB/s
+    pub threshold: u64, // KB/s
+}
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum TimeRange {
     TenMinutes,
@@ -75,6 +84,11 @@ pub struct App {
     pub show_detail: bool,
     pub show_graph: bool,
     pub show_help: bool,
+    pub show_threshold_dialog: bool,
+    pub show_alerts: bool,
+    pub threshold_input: String,
+    pub thresholds: HashMap<u32, u64>, // PID -> KB/s
+    pub alerts: VecDeque<Alert>,
     pub graph_time_range: TimeRange,
     pub graph_data_up: Vec<(f64, f64)>,
     pub graph_data_down: Vec<(f64, f64)>,
@@ -101,6 +115,11 @@ impl App {
             show_detail: false,
             show_graph: false,
             show_help: false,
+            show_threshold_dialog: false,
+            show_alerts: false,
+            threshold_input: String::new(),
+            thresholds: HashMap::new(),
+            alerts: VecDeque::with_capacity(MAX_HISTORY),
             graph_time_range: TimeRange::TenMinutes,
             graph_data_up: Vec::new(),
             graph_data_down: Vec::new(),
