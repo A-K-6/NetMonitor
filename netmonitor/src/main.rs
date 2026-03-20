@@ -2,6 +2,7 @@ mod process;
 mod app;
 mod tui;
 mod ui;
+mod geoip;
 
 use app::{App, Column, ProcessRow};
 use aya::maps::HashMap;
@@ -214,9 +215,12 @@ async fn main() -> Result<(), anyhow::Error> {
             for result in connections_map.iter() {
                 if let Ok((key, stats)) = result {
                     use std::net::Ipv4Addr;
+                    let dst_addr = Ipv4Addr::from(u32::from_be(key.dst_ip));
                     let src_ip = Ipv4Addr::from(u32::from_be(key.src_ip)).to_string();
-                    let dst_ip = Ipv4Addr::from(u32::from_be(key.dst_ip)).to_string();
+                    let dst_ip = dst_addr.to_string();
                     
+                    let (country, isp) = geoip::RESOLVER.resolve(std::net::IpAddr::V4(dst_addr));
+
                     let conn_info = app::ConnectionInfo {
                         proto: key.proto,
                         src_ip,
@@ -225,6 +229,8 @@ async fn main() -> Result<(), anyhow::Error> {
                         dst_port: key.dst_port,
                         up_bytes: stats.bytes_sent,
                         down_bytes: stats.bytes_recv,
+                        country,
+                        isp,
                     };
                     app.connections.entry(key.pid).or_default().push(conn_info);
                 }
@@ -236,8 +242,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
             for row in app.process_history.values() {
                 if app.filter_text.is_empty() || row.name.to_lowercase().contains(&filter_lower) {
-                    // Only show rows that have activity or are specifically filtered?
-                    // Let's show everything that matches the filter.
                     app.process_data.push(row.clone());
                 }
             }

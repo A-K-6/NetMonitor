@@ -207,6 +207,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
                     Cell::from("PROTO"),
                     Cell::from("LOCAL ADDR"),
                     Cell::from("REMOTE ADDR"),
+                    Cell::from("GEO"),
+                    Cell::from("ISP"),
                     Cell::from("UP (KB)"),
                     Cell::from("DOWN (KB)"),
                 ]).style(Style::default().fg(Color::Blue)).height(1);
@@ -223,6 +225,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
                             Cell::from(proto),
                             Cell::from(format!("{}:{}", c.src_ip, c.src_port)),
                             Cell::from(format!("{}:{}", c.dst_ip, c.dst_port)),
+                            Cell::from(c.country.clone()),
+                            Cell::from(c.isp.clone()),
                             Cell::from(Line::from(format!("{:.1}", c.up_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
                             Cell::from(Line::from(format!("{:.1}", c.down_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
                         ]).height(1)
@@ -232,10 +236,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
                 let conn_table = Table::new(conn_rows, [
                     Constraint::Length(6),
-                    Constraint::Percentage(30),
-                    Constraint::Percentage(30),
+                    Constraint::Percentage(20),
+                    Constraint::Percentage(20),
                     Constraint::Percentage(15),
                     Constraint::Percentage(15),
+                    Constraint::Percentage(12),
+                    Constraint::Percentage(12),
                 ])
                 .header(conn_header)
                 .block(Block::default().borders(Borders::ALL).title("Active Connections"));
