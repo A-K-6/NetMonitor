@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, Result};
 use std::path::Path;
-use chrono::Utc;
-use crate::app::ProcessRow;
+use chrono::{Utc, DateTime};
+use crate::app::{ProcessRow, TimeRange};
 use std::collections::HashMap;
 
 pub struct DbManager {
@@ -42,6 +42,47 @@ impl DbManager {
         )?;
 
         Ok(())
+    }
+
+    pub fn get_traffic_history(&self, pid: u32, range: TimeRange) -> Result<Vec<(DateTime<Utc>, u64, u64)>> {
+        let now = Utc::now();
+        let seconds = range.to_seconds();
+        let start_time = now - chrono::Duration::seconds(seconds);
+        
+        // Determine bucket size in seconds
+        let bucket_size = match range {
+            TimeRange::TenMinutes => 10,       // 10s buckets
+            TimeRange::OneHour => 60,         // 1m buckets
+            TimeRange::TwentyFourHours => 900, // 15m buckets
+        };
+
+        let start_ts = start_time.timestamp();
+        
+        let mut stmt = self.conn.prepare(
+            "SELECT 
+                ((strftime('%s', timestamp) - ?1) / ?2) * ?2 + ?1 as bucket_ts,
+                SUM(up_bytes),
+                SUM(down_bytes)
+             FROM traffic_log
+             WHERE pid = ?3 AND timestamp >= ?4
+             GROUP BY bucket_ts
+             ORDER BY bucket_ts ASC"
+        )?;
+
+        let history_iter = stmt.query_map(params![start_ts, bucket_size, pid, start_time], |row| {
+            let ts_secs: i64 = row.get(0)?;
+            let up: u64 = row.get(1)?;
+            let down: u64 = row.get(2)?;
+            
+            let dt = DateTime::from_timestamp(ts_secs, 0).unwrap_or_else(|| Utc::now());
+            Ok((dt, up, down))
+        })?;
+
+        let mut results = Vec::new();
+        for item in history_iter {
+            results.push(item?);
+        }
+        Ok(results)
     }
 
     pub fn load_historical_stats(&self) -> Result<HashMap<u32, ProcessRow>> {

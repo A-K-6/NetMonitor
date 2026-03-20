@@ -31,11 +31,11 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Geo-IP & ASN Mapping:** Map IPs to countries and organizations (e.g., "Dublin, IE - Amazon.com").
 - [x] **Protocol Heuristics:** Identify common traffic types (HTTPS, DNS, SSH, Bittorrent) based on port and pattern analysis.
 - [x] **Traffic Persistence:** Save and reload session history to track bandwidth across app restarts.
+- [x] **Interactive Graphs:** Full-screen historical graph mode for specific processes.
 - [ ] **Smart Alerts:** System notifications for when a process exceeds a defined bandwidth threshold.
-- [ ] **Phase 3 TUI Final Polish:** 
-    - [ ] **Interactive Graphs:** Full-screen historical graph mode for specific processes.
-    - [ ] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
+- [ ] **TUI Refinement:**
     - [ ] **Help Overlay:** A dedicated `?` screen explaining all keybindings and features.
+    - [ ] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
     - [ ] **Mouse Support:** Basic click-to-select and scroll support for the process table.
 
 ## Phase 4: Stability & Documentation
@@ -48,6 +48,8 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
     - [ ] Generate API/Kernel specifications.
     - [ ] Create a compelling `README.md` with screenshots/GIFs of the TUI.
 - [ ] **Background Mode:** Implement `netmonitord` (Systemd service) for continuous logging.
+- [ ] **TUI Complete Refinement:** 
+    - [ ] Final UX polish, accessibility audit, and performance optimization of the rendering pipeline.
 
 ## Phase 5: Release & Distribution
 *Goal: Getting NetMonitor into the hands of users.*

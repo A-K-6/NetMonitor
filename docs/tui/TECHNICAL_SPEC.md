@@ -55,10 +55,18 @@ A sortable table with columns for:
 - **DOWN (KB/s):** Real-time download speed.
 - **TOTAL:** Cumulative data transferred.
 
-### 3.3. Footer (Hotkeys)
+### 3.3. Graph View (Historical Analysis)
+A full-screen interactive view (toggle with `g`) for the selected process:
+- **Bandwidth Chart:** Visualizes time-series data from `traffic_log` using `ratatui::widgets::Chart`.
+- **Time Ranges:** Support for toggling between 10 minutes, 1 hour, and 24 hours (via `Tab`).
+- **Metrics:** Separate color-coded lines for "Upload" (Green) and "Download" (Yellow).
+
+### 3.4. Footer (Hotkeys)
 - `q`: Quit.
 - `k`: Kill selected process (requires user confirmation).
 - `s`: Change sorting column.
+- `/`: Search/Filter processes by name.
+- `g`: Toggle Graph View for selected process.
 - `Enter`: Toggle "Connection Deep-Dive" detail view for selected process.
 
 ## 4. Input & Events

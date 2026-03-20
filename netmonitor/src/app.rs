@@ -38,6 +38,31 @@ pub struct ConnectionInfo {
     pub service: String,
 }
 
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum TimeRange {
+    TenMinutes,
+    OneHour,
+    TwentyFourHours,
+}
+
+impl TimeRange {
+    pub fn to_seconds(&self) -> i64 {
+        match self {
+            TimeRange::TenMinutes => 600,
+            TimeRange::OneHour => 3600,
+            TimeRange::TwentyFourHours => 86400,
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            TimeRange::TenMinutes => "10m",
+            TimeRange::OneHour => "1h",
+            TimeRange::TwentyFourHours => "24h",
+        }
+    }
+}
+
 pub struct App {
     pub process_data: Vec<ProcessRow>,
     pub total_upload: u64,
@@ -48,6 +73,11 @@ pub struct App {
     pub is_running: bool,
     pub show_kill_dialog: bool,
     pub show_detail: bool,
+    pub show_graph: bool,
+    pub show_help: bool,
+    pub graph_time_range: TimeRange,
+    pub graph_data_up: Vec<(f64, f64)>,
+    pub graph_data_down: Vec<(f64, f64)>,
     pub filter_text: String,
     pub is_filtering: bool,
     pub status_message: Option<String>,
@@ -69,6 +99,11 @@ impl App {
             is_running: true,
             show_kill_dialog: false,
             show_detail: false,
+            show_graph: false,
+            show_help: false,
+            graph_time_range: TimeRange::TenMinutes,
+            graph_data_up: Vec::new(),
+            graph_data_down: Vec::new(),
             filter_text: String::new(),
             is_filtering: false,
             status_message: None,

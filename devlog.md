@@ -1,3 +1,24 @@
+2026-03-20 13:10 - Proposed Task 016: Smart Bandwidth Alerts & Thresholds.
+- Created `docs/ideas/todo/016-smart-alerts.md`.
+- Planned implementation of PID-based bandwidth thresholds (KB/s).
+- Planned UI enhancements for alert indicators and a threshold configuration dialog (hotkey `a`).
+
+2026-03-20 13:00 - Completed Task 015: Help Overlay & Keybinding Documentation.
+- Added `show_help: bool` to the `App` state in `netmonitor/src/app.rs`.
+- Implemented `render_help_overlay` in `netmonitor/src/ui.rs` using a centered Magenta-themed table.
+- Updated `netmonitor/src/main.rs` to handle `?` and `h` for toggling the help screen.
+- Ensured `Esc`, `q`, and `?` close the help overlay, and that other keys are suppressed while open.
+- Updated footer to include `?: Help` documentation.
+- Verified build and interaction logic.
+
+2026-03-20 12:00 - Completed Task 014: Interactive Graphs & Historical View.
+- Implemented `get_traffic_history` in `DbManager` with time-based bucketing (10s, 1m, 15m) for different time ranges (10m, 1h, 24h).
+- Added `show_graph`, `graph_time_range`, and historical traffic buffers to the `App` state.
+- Integrated keyboard handling for "Graph View" (toggle with `g`, cycle range with `Tab`, close with `Esc`).
+- Implemented full-screen interactive bandwidth chart using `ratatui::widgets::Chart`.
+- Added color-coded lines for "Upload" (Green) and "Download" (Yellow) with dynamic Y-axis scaling.
+- Verified time-series data retrieval and rendering through `cargo check` and UI review.
+
 2026-03-20 11:00 - Completed Task 013: Traffic Persistence & SQLite Integration.
 - Integrated `rusqlite` for local database storage.
 - Designed and implemented schema for `processes` (cumulative) and `traffic_log` (time-series) tables.

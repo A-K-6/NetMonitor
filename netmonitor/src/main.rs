@@ -7,7 +7,7 @@ mod protocol;
 mod dns;
 mod db;
 
-use app::{App, Column, ProcessRow};
+use app::{App, Column, ProcessRow, TimeRange};
 use aya::maps::HashMap;
 use aya::programs::KProbe;
 use aya::Ebpf;
@@ -20,6 +20,7 @@ use std::env;
 use std::time::{Duration, Instant};
 use log::{error, info};
 use db::DbManager;
+use chrono::Utc;
 
 fn check_caps() -> Result<(), anyhow::Error> {
     let required = [Capability::CAP_BPF, Capability::CAP_NET_ADMIN];
@@ -81,41 +82,47 @@ async fn main() -> Result<(), anyhow::Error> {
     let raw_recv: &mut KProbe = bpf.program_mut("raw_recvmsg").expect("raw_recvmsg not found").try_into()?;
     raw_recv.load()?;
     raw_recv.attach("raw_recvmsg", 0)?;
-let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.take_map("TRAFFIC_STATS").unwrap())?;
-let connections_map: HashMap<_, ConnectionKey, TrafficStats> = 
-    HashMap::try_from(bpf.take_map("CONNECTIONS").unwrap())?;
 
-let mut db = DbManager::new("netmonitor.db")?;
-let historical_data = db.load_historical_stats()?;
-info!("Loaded historical stats for {} processes", historical_data.len());
+    let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.take_map("TRAFFIC_STATS").unwrap())?;
+    let connections_map: HashMap<_, ConnectionKey, TrafficStats> = 
+        HashMap::try_from(bpf.take_map("CONNECTIONS").unwrap())?;
 
-let mut resolver = ProcessResolver::new(Duration::from_secs(10));
-let mut terminal = tui::Tui::new()?;
-let mut app = App::new(historical_data);
+    let mut db = DbManager::new("netmonitor.db")?;
+    let historical_data = db.load_historical_stats()?;
+    info!("Loaded historical stats for {} processes", historical_data.len());
 
-let mut last_tick = Instant::now();
-let mut last_db_flush = Instant::now();
-let tick_rate = Duration::from_millis(1000);
-let db_flush_rate = Duration::from_secs(60);
+    let mut resolver = ProcessResolver::new(Duration::from_secs(10));
+    let mut terminal = tui::Tui::new()?;
+    let mut app = App::new(historical_data);
 
-// Track deltas for DB flushing
-let mut db_deltas: std::collections::HashMap<u32, (u64, u64)> = std::collections::HashMap::new();
+    let mut last_tick = Instant::now();
+    let mut last_db_flush = Instant::now();
+    let tick_rate = Duration::from_millis(1000);
+    let db_flush_rate = Duration::from_secs(60);
 
-while app.is_running {
-    terminal.draw(|f| ui::render(f, &mut app))?;
+    // Track deltas for DB flushing
+    let mut db_deltas: std::collections::HashMap<u32, (u64, u64)> = std::collections::HashMap::new();
 
-    let timeout = tick_rate
-        .checked_sub(last_tick.elapsed())
-        .unwrap_or_else(|| Duration::from_secs(0));
+    while app.is_running {
+        terminal.draw(|f| ui::render(f, &mut app))?;
 
-    if let Some(event) = terminal.handle_events(timeout)? {
-        if let Event::Key(key) = event {
-            // ... (keyboard handling)
+        let timeout = tick_rate
+            .checked_sub(last_tick.elapsed())
+            .unwrap_or_else(|| Duration::from_secs(0));
 
+        if let Some(event) = terminal.handle_events(timeout)? {
+            if let Event::Key(key) = event {
                 // Clear status message on any key press
                 app.status_message = None;
 
-                if app.is_filtering {
+                if app.show_help {
+                    match key.code {
+                        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+                            app.show_help = false;
+                        }
+                        _ => {}
+                    }
+                } else if app.is_filtering {
                     match key.code {
                         KeyCode::Char(c) => {
                             app.filter_text.push(c);
@@ -149,6 +156,30 @@ while app.is_running {
                         }
                         _ => {}
                     }
+                } else if app.show_graph {
+                    match key.code {
+                        KeyCode::Esc | KeyCode::Char('g') | KeyCode::Char('q') => {
+                            app.show_graph = false;
+                        }
+                        KeyCode::Tab => {
+                            app.graph_time_range = match app.graph_time_range {
+                                TimeRange::TenMinutes => TimeRange::OneHour,
+                                TimeRange::OneHour => TimeRange::TwentyFourHours,
+                                TimeRange::TwentyFourHours => TimeRange::TenMinutes,
+                            };
+                            // Refetch data
+                            if let Some(i) = app.table_state.selected() {
+                                if let Some(row) = app.process_data.get(i) {
+                                    if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
+                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                        app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
+                                        app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                 } else {
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => {
@@ -165,6 +196,19 @@ while app.is_running {
                         KeyCode::Enter => {
                             app.show_detail = !app.show_detail;
                         }
+                        KeyCode::Char('g') => {
+                            if let Some(i) = app.table_state.selected() {
+                                if let Some(row) = app.process_data.get(i) {
+                                    app.show_graph = true;
+                                    // Fetch data
+                                    if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
+                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                        app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
+                                        app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                    }
+                                }
+                            }
+                        }
                         KeyCode::Char('k') => {
                             if app.table_state.selected().is_some() {
                                 app.show_kill_dialog = true;
@@ -180,6 +224,9 @@ while app.is_running {
                                 Column::Total => Column::Pid,
                             };
                             app.toggle_sort(next_col);
+                        }
+                        KeyCode::Char('?') | KeyCode::Char('h') => {
+                            app.show_help = true;
                         }
                         _ => {}
                     }
