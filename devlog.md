@@ -1,3 +1,21 @@
+2026-03-20 06:15 - Completed Task 008: Protocol Expansion (UDP & ICMP).
+- Expanded eBPF monitoring to include UDP and RAW/ICMP traffic for broader visibility.
+- Implemented `kprobe` for `udp_sendmsg` and `raw_sendmsg` to capture outbound data.
+- Implemented `kretprobe` for `udp_recvmsg` and `raw_recvmsg` to capture inbound data.
+- Refactored eBPF code with an `update_stats` helper for consistent data aggregation.
+- Updated userspace loader in `main.rs` to attach all new probes at startup.
+- Verified successful build of both eBPF bytecode and userspace application.
+- Updated `TECHNICAL_SPEC.md` and `ROADMAP.md` to reflect new protocol coverage.
+
+2026-03-20 05:45 - Completed Task 007: TUI Polish & The "Kill-Switch".
+- Implemented `libc::kill` with `SIGKILL` for selected processes in the TUI.
+- Added a confirmation dialog for the kill-switch and status messages for success/failure.
+- Enhanced TUI header with real-time global traffic Sparklines for Upload and Download.
+- Refined process table with right-aligned numeric columns for better readability.
+- Implemented a "Process Detail" popup (Enter key) showing extended stats.
+- Integrated `status_message` into the footer for user feedback.
+- Verified build for userspace application (`cargo build -p netmonitor`).
+
 2026-03-20 05:20 - Fixed compiler warnings in eBPF and userspace.
 - Changed eBPF `TRAFFIC_STATS` from `static mut` to `static` to align with Aya standards and resolve Edition 2024 warnings.
 - Cleaned up unused imports and variables in `main.rs` and `netmonitor-ebpf/src/main.rs`.
