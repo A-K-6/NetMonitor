@@ -3,6 +3,7 @@ members = [
     "netmonitor",
     "netmonitor-ebpf",
     "netmonitor-common",
+    "netmonitor-xtask",
 ]
 resolver = "2"
 
@@ -15,7 +16,7 @@ repository = "https://github.com/your-username/NetMonitor"
 description = "A high-performance network monitoring tool for Linux using eBPF and Rust."
 
 [workspace.dependencies]
-aya = { version = "0.12", default-features = false }
+aya = { version = "0.13", default-features = false }
 aya-log = "0.2"
 netmonitor-common = { path = "netmonitor-common" }
 ratatui = "0.26"
