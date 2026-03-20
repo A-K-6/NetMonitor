@@ -29,9 +29,11 @@ To ensure high quality and successful packaging as a Linux distribution (e.g., D
 - [x] **🌍 Geo-IP & ASN:** Map destination IPs to countries and providers (e.g., "Slack -> AWS Ireland"). Use an embedded MaxMind Lite database.
     - **Database Update:** To update the embedded database, replace `netmonitor/resources/geoip-dummy.mmdb` with a valid MaxMind GeoLite2 or DB-IP `.mmdb` file and recompile the project. The build process uses `include_bytes!` to ensure a single, zero-dependency binary.
 - [x] **🛑 Integrated "Kill-Switch":** Terminate a bandwidth-hogging process directly from the UI with a single hotkey (`k`).
+- [x] **🕵️ Connection Deep-Dive:** Toggle detail view to see all active sockets/IPs for a selected process.
+- [x] **🌐 Reverse DNS:** Resolve destination IPs to human-readable hostnames in real-time.
+- [x] **🔍 Protocol Heuristics:** Identify common traffic types (HTTPS, DNS, SSH) based on port mapping.
 - [ ] **📉 Traffic Shaping (Post-MVP):** Use `tc` (Traffic Control) or cgroups to throttle a specific process (e.g., "Limit Chrome to 5Mbps").
 - [ ] **🔔 Smart Alerts:** Desktop/System notifications when a process exceeds a configurable threshold (e.g., "Unknown app `backup.sh` is uploading at 50MB/s").
-- [x] **🕵️ Connection Deep-Dive:** Toggle detail view to see all active sockets/IPs for a selected process.
 
 ---
 

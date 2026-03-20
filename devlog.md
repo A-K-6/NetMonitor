@@ -1,3 +1,13 @@
+2026-03-20 09:30 - Completed Tasks 010 (Reverse DNS) and 012 (Protocol Heuristics).
+- Implemented `ProtocolResolver` in `netmonitor/src/protocol.rs` for common port-to-service mapping.
+- Implemented `DnsResolver` in `netmonitor/src/dns.rs` using `trust-dns-resolver` with a `DashMap` cache.
+- Updated `ConnectionInfo` to store `hostname` and `service` fields.
+- Integrated resolvers into the main userspace loop with asynchronous DNS lookups triggered on-demand.
+- Enhanced the TUI "Active Connections" table with "SERVICE" and "REMOTE HOST/IP" columns.
+- Verified `ProtocolResolver` with unit tests and confirmed build integrity.
+- Moved Task 010 and 012 idea files to `docs/ideas/done/`.
+- Updated `TECHNICAL_SPEC.md` to reflect the new metadata resolution steps.
+
 2026-03-20 08:30 - Completed Task 011: Geo-IP & ASN Mapping.
 - Integrated `maxminddb` for destination IP address to country/organization mapping.
 - Implemented `GeoResolver` with a fallback mechanism and `include_bytes!` embedding.
