@@ -2,8 +2,9 @@ use crate::app::{App, Column};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect, Alignment},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear, Sparkline},
-    text::Line,
+    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear, Sparkline, Chart, Axis, Dataset, GraphType},
+    text::{Line, Span},
+    symbols,
     Frame,
 };
 
@@ -152,10 +153,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
     // Footer
     let footer_text = if app.is_filtering {
         "Type to filter | Enter/Esc: Finish".to_string()
+    } else if app.show_graph {
+        format!("Tab: Cycle Range ({}) | g/Esc: Close", app.graph_time_range.label())
     } else if let Some(msg) = &app.status_message {
         format!("STATUS: {} | Press any key to clear", msg)
     } else {
-        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details".to_string()
+        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | ?: Help".to_string()
     };
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(Color::DarkGray))
@@ -265,6 +268,100 @@ pub fn render(f: &mut Frame, app: &mut App) {
             }
         }
     }
+
+    // Graph View
+    if app.show_graph {
+        render_graph_view(f, app, size);
+    }
+
+    // Help Overlay
+    if app.show_help {
+        render_help_overlay(f, size);
+    }
+}
+
+fn render_help_overlay(f: &mut Frame, size: Rect) {
+    let area = centered_rect(60, 60, size);
+    f.render_widget(Clear, area);
+
+    let help_text = vec![
+        Row::new(vec![Cell::from("q / Esc"), Cell::from("Quit / Back")]),
+        Row::new(vec![Cell::from("k"), Cell::from("Kill selected process")]),
+        Row::new(vec![Cell::from("s"), Cell::from("Cycle sort column (Pid -> Name -> Up -> Down -> Total)")]),
+        Row::new(vec![Cell::from("/"), Cell::from("Filter by process name")]),
+        Row::new(vec![Cell::from("Enter"), Cell::from("Deep-dive into process connections")]),
+        Row::new(vec![Cell::from("g"), Cell::from("Traffic history graph (requires historical data)")]),
+        Row::new(vec![Cell::from("?"), Cell::from("Toggle this help screen")]),
+        Row::new(vec![Cell::from("Up/Down"), Cell::from("Navigate process table")]),
+        Row::new(vec![Cell::from("Tab"), Cell::from("Cycle graph time range (when in graph view)")]),
+    ];
+
+    let help_table = Table::new(help_text, [Constraint::Percentage(30), Constraint::Percentage(70)])
+        .header(Row::new(vec![Cell::from("Key"), Cell::from("Action")])
+            .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta))
+            .bottom_margin(1))
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(" Help / Keybindings ")
+            .style(Style::default().fg(Color::Magenta))
+            .border_style(Style::default().fg(Color::Magenta)));
+
+    f.render_widget(help_table, area);
+}
+
+fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
+    let area = centered_rect(90, 80, size);
+    f.render_widget(Clear, area);
+
+    let selected_proc = app.table_state.selected()
+        .and_then(|i| app.process_data.get(i));
+
+    let title = match selected_proc {
+        Some(p) => format!(" Traffic History: {} (PID: {}) - [{}] ", p.name, p.pid, app.graph_time_range.label()),
+        None => " Traffic History ".to_string(),
+    };
+
+    let up_dataset = Dataset::default()
+        .name("Upload (KB/s)")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(Color::Green))
+        .data(&app.graph_data_up);
+
+    let down_dataset = Dataset::default()
+        .name("Download (KB/s)")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(Color::Yellow))
+        .data(&app.graph_data_down);
+
+    let max_up = app.graph_data_up.iter().map(|(_, v)| *v).fold(0.0, f64::max);
+    let max_down = app.graph_data_down.iter().map(|(_, v)| *v).fold(0.0, f64::max);
+    let max_y = (max_up.max(max_down) * 1.2).max(10.0);
+
+    let x_bounds = [0.0, app.graph_time_range.to_seconds() as f64];
+    
+    let chart = Chart::new(vec![up_dataset, down_dataset])
+        .block(Block::default().borders(Borders::ALL).title(title))
+        .x_axis(Axis::default()
+            .title("Time (s ago)")
+            .style(Style::default().fg(Color::Gray))
+            .bounds(x_bounds)
+            .labels(vec![
+                Span::styled(format!("{:.0}", x_bounds[1]), Style::default()),
+                Span::styled("0", Style::default()),
+            ]))
+        .y_axis(Axis::default()
+            .title("KB/s")
+            .style(Style::default().fg(Color::Gray))
+            .bounds([0.0, max_y])
+            .labels(vec![
+                Span::styled("0", Style::default()),
+                Span::styled(format!("{:.1}", max_y / 2.0), Style::default()),
+                Span::styled(format!("{:.1}", max_y), Style::default()),
+            ]));
+
+    f.render_widget(chart, area);
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

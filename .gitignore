@@ -29,3 +29,7 @@ Thumbs.db
 dist/
 *.deb
 *.rpm
+
+
+# db
+*.db
