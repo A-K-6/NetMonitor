@@ -15,11 +15,12 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 
 ## Phase 2: MVP (Core Features & TUI)
 *Goal: A functional Terminal UI displaying real-time process bandwidth.*
-- [ ] **Process Resolver:** Build a `/proc` crawler to map PIDs to human-readable application names.
-- [ ] **TUI Scaffolding:** Initialize `Ratatui` with a basic layout (Header, Process Table, Footer).
-- [ ] **Real-time Refresh:** Implement a 1Hz (or higher) refresh loop that pulls data from BPF maps.
+- [x] **Process Resolver:** Build a `/proc` crawler to map PIDs to human-readable application names.
+- [x] **TUI Scaffolding:** Initialize `Ratatui` with a basic layout (Header, Process Table, Footer).
+- [x] **Real-time Refresh:** Implement a 1Hz (or higher) refresh loop that pulls data from BPF maps.
 - [ ] **Sorting & Filtering:** Add ability to sort by "Upload"/"Download" and filter by process name.
 - [ ] **Cumulative Stats:** Track total data consumed since the application started.
+- [ ] **TUI Polish:** Make the UI more beautiful with advanced Ratatui widgets (e.g., Sparklines, Gauges, better borders and color themes).
 
 ## Phase 3: Advanced Features (Power-User Tools)
 *Goal: Add intelligence and control to the monitoring experience.*
@@ -29,13 +30,21 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [ ] **Connection Deep-Dive:** Add a "Detail View" to see individual socket connections (IP:Port) for a specific process.
 - [ ] **Smart Alerts:** Implement a notification system for when a process exceeds a defined bandwidth threshold.
 
-## Phase 4: Stability & Distribution
-*Goal: Professional-grade packaging and performance optimization.*
+## Phase 4: Stability & Documentation
+*Goal: Professional-grade packaging and rigorous documentation.*
 - [ ] **Performance Audit:** Verify CPU usage remains <1% under heavy network load.
 - [ ] **CO-RE Validation:** Test the binary on multiple kernel versions (BTF support).
 - [ ] **Headless Mode:** Implement a mode for JSON/CSV output or Prometheus exporting.
+- [ ] **Comprehensive Documentation:** 
+    - [ ] Finalize user manuals and usage examples.
+    - [ ] Generate API/Kernel specifications.
+    - [ ] Create a compelling `README.md` with screenshots/GIFs of the TUI.
+- [ ] **Background Mode:** Implement `netmonitord` (Systemd service) for continuous logging.
+
+## Phase 5: Release & Distribution
+*Goal: Getting NetMonitor into the hands of users.*
 - [ ] **Packaging:** 
     - [ ] Create `.deb` package via `cargo-deb`.
     - [ ] Create AUR (Arch User Repository) PKGBUILD.
-- [ ] **Background Mode:** Implement `netmonitord` (Systemd service) for continuous logging.
-- [ ] **Documentation:** Finalize user manuals and API/Kernel specifications.
+    - [ ] Provide static binaries for Linux via GitHub Actions.
+- [ ] **Initial Release (v0.1.0):** Tag the first stable release and publish it to GitHub and potentially `crates.io` (if applicable).
