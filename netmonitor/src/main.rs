@@ -3,6 +3,8 @@ mod app;
 mod tui;
 mod ui;
 mod geoip;
+mod protocol;
+mod dns;
 
 use app::{App, Column, ProcessRow};
 use aya::maps::HashMap;
@@ -214,12 +216,26 @@ async fn main() -> Result<(), anyhow::Error> {
             app.connections.clear();
             for result in connections_map.iter() {
                 if let Ok((key, stats)) = result {
-                    use std::net::Ipv4Addr;
+                    use std::net::{Ipv4Addr, IpAddr};
                     let dst_addr = Ipv4Addr::from(u32::from_be(key.dst_ip));
                     let src_ip = Ipv4Addr::from(u32::from_be(key.src_ip)).to_string();
+                    let dst_ip_addr = IpAddr::V4(dst_addr);
                     let dst_ip = dst_addr.to_string();
                     
-                    let (country, isp) = geoip::RESOLVER.resolve(std::net::IpAddr::V4(dst_addr));
+                    let (country, isp) = geoip::RESOLVER.resolve(dst_ip_addr);
+                    let service = protocol::RESOLVER.resolve(key.proto, key.dst_port);
+                    
+                    // Get cached hostname or trigger resolution
+                    let hostname = match dns::RESOLVER.get_cached(dst_ip_addr) {
+                        Some(h) => h,
+                        None => {
+                            // Spawn background resolution if not in cache
+                            tokio::spawn(async move {
+                                dns::RESOLVER.resolve(dst_ip_addr).await;
+                            });
+                            None
+                        }
+                    };
 
                     let conn_info = app::ConnectionInfo {
                         proto: key.proto,
@@ -231,6 +247,8 @@ async fn main() -> Result<(), anyhow::Error> {
                         down_bytes: stats.bytes_recv,
                         country,
                         isp,
+                        hostname,
+                        service,
                     };
                     app.connections.entry(key.pid).or_default().push(conn_info);
                 }

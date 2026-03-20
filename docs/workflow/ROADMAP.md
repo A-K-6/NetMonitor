@@ -26,10 +26,10 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 *Goal: Add intelligence, control, and deep-packet insights.*
 - [x] **The "Kill-Switch":** Implement the `k` hotkey to send `SIGKILL` to a selected bandwidth-hogging process.
 - [x] **Protocol Expansion:** Implement `udp_sendmsg` and `icmp` tracking to cover non-TCP traffic.
-- [ ] **Connection Deep-Dive:** Add a "Socket View" to see individual IP:Port connections for a specific PID.
-- [ ] **Reverse DNS Resolution:** Resolve destination IPs to hostnames (e.g., `172.217.16.14` -> `google.com`).
-- [ ] **Geo-IP & ASN Mapping:** Map IPs to countries and organizations (e.g., "Dublin, IE - Amazon.com").
-- [ ] **Protocol Heuristics:** Identify common traffic types (HTTPS, DNS, SSH, Bittorrent) based on port and pattern analysis.
+- [x] **Connection Deep-Dive:** Add a "Socket View" to see individual IP:Port connections for a specific PID.
+- [x] **Reverse DNS Resolution:** Resolve destination IPs to hostnames (e.g., `172.217.16.14` -> `google.com`).
+- [x] **Geo-IP & ASN Mapping:** Map IPs to countries and organizations (e.g., "Dublin, IE - Amazon.com").
+- [x] **Protocol Heuristics:** Identify common traffic types (HTTPS, DNS, SSH, Bittorrent) based on port and pattern analysis.
 - [ ] **Traffic Persistence:** Save and reload session history to track bandwidth across app restarts.
 - [ ] **Smart Alerts:** System notifications for when a process exceeds a defined bandwidth threshold.
 - [ ] **Phase 3 TUI Final Polish:** 

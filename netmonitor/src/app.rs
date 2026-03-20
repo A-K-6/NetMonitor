@@ -34,6 +34,8 @@ pub struct ConnectionInfo {
     pub down_bytes: u64,
     pub country: String,
     pub isp: String,
+    pub hostname: Option<String>,
+    pub service: String,
 }
 
 pub struct App {

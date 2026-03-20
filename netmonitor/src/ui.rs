@@ -205,8 +205,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
                 let conns = app.connections.get(&row.pid);
                 let conn_header = Row::new(vec![
                     Cell::from("PROTO"),
+                    Cell::from("SERVICE"),
                     Cell::from("LOCAL ADDR"),
-                    Cell::from("REMOTE ADDR"),
+                    Cell::from("REMOTE HOST/IP"),
                     Cell::from("GEO"),
                     Cell::from("ISP"),
                     Cell::from("UP (KB)"),
@@ -221,10 +222,16 @@ pub fn render(f: &mut Frame, app: &mut App) {
                             1 => "ICMP",
                             _ => "RAW",
                         };
+                        let remote = if let Some(host) = &c.hostname {
+                            format!("{} ({})", host, c.dst_ip)
+                        } else {
+                            format!("{}:{}", c.dst_ip, c.dst_port)
+                        };
                         Row::new(vec![
                             Cell::from(proto),
+                            Cell::from(c.service.clone()),
                             Cell::from(format!("{}:{}", c.src_ip, c.src_port)),
-                            Cell::from(format!("{}:{}", c.dst_ip, c.dst_port)),
+                            Cell::from(remote),
                             Cell::from(c.country.clone()),
                             Cell::from(c.isp.clone()),
                             Cell::from(Line::from(format!("{:.1}", c.up_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
@@ -236,12 +243,13 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
                 let conn_table = Table::new(conn_rows, [
                     Constraint::Length(6),
-                    Constraint::Percentage(20),
-                    Constraint::Percentage(20),
+                    Constraint::Length(10),
                     Constraint::Percentage(15),
-                    Constraint::Percentage(15),
-                    Constraint::Percentage(12),
-                    Constraint::Percentage(12),
+                    Constraint::Percentage(25),
+                    Constraint::Percentage(10),
+                    Constraint::Percentage(10),
+                    Constraint::Percentage(10),
+                    Constraint::Percentage(10),
                 ])
                 .header(conn_header)
                 .block(Block::default().borders(Borders::ALL).title("Active Connections"));
