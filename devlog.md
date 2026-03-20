@@ -1,3 +1,17 @@
+2026-03-20 11:00 - Completed Task 013: Traffic Persistence & SQLite Integration.
+- Integrated `rusqlite` for local database storage.
+- Designed and implemented schema for `processes` (cumulative) and `traffic_log` (time-series) tables.
+- Implemented `DbManager` in `netmonitor/src/db.rs` with batch flushing capabilities.
+- Added startup hook to load historical statistics into the `App` state.
+- Integrated a periodic 60-second flush and a final shutdown flush in the main loop.
+- Added unit tests for database schema initialization, batch inserts, and historical data loading.
+- Updated `TECHNICAL_SPEC.md` with the new data persistence architecture.
+- Verified build and unit test integrity.
+
+2026-03-20 10:00 - Proposed Task 013: Traffic Persistence & SQLite Integration.
+- Created `docs/ideas/todo/013-traffic-persistence.md`.
+- Objective: Persist bandwidth statistics and connection history to a local database for historical analysis and session reloads.
+
 2026-03-20 09:30 - Completed Tasks 010 (Reverse DNS) and 012 (Protocol Heuristics).
 - Implemented `ProtocolResolver` in `netmonitor/src/protocol.rs` for common port-to-service mapping.
 - Implemented `DnsResolver` in `netmonitor/src/dns.rs` using `trust-dns-resolver` with a `DashMap` cache.
