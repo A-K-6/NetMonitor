@@ -1,3 +1,36 @@
+2026-03-20 05:20 - Fixed compiler warnings in eBPF and userspace.
+- Changed eBPF `TRAFFIC_STATS` from `static mut` to `static` to align with Aya standards and resolve Edition 2024 warnings.
+- Cleaned up unused imports and variables in `main.rs` and `netmonitor-ebpf/src/main.rs`.
+- All components now build without warnings.
+
+2026-03-20 05:15 - Completed Task 006: Filtering & Cumulative Stats Tracking.
+- Implemented process filtering by name using keyboard input ('/' or 'f' to activate).
+- Added `filter_text` and `is_filtering` state to `App`.
+- Integrated a search bar in the UI that appears when filtering is active.
+- Refactored data aggregation to calculate per-tick rates (KB/s) and maintain cumulative totals.
+- Added `process_history` to `App` to preserve stats for processes even when they become inactive.
+- Updated UI table columns to reflect real-time rates (UP/DOWN) and absolute totals.
+- Verified build with `cargo xtask build-ebpf` and `cargo build`.
+
+2026-03-20 05:05 - Created Task 006: Filtering & Cumulative Stats Tracking.
+- Proposed plan to implement process filtering by name using keyboard input in Ratatui.
+- Outlined strategy to maintain cumulative traffic stats across application lifecycle, preventing resets on process idle/death.
+
+
+2026-03-20 05:00 - Completed Task 005: TUI Scaffolding (Ratatui MVP).
+- Implemented TUI using `ratatui` and `crossterm`.
+- Created `App` struct to hold process statistics and UI state.
+- Implemented layout with Header, Main (sortable table), and Footer.
+- Integrated Crossterm for terminal raw mode and event handling.
+- Refactored `main.rs` to render UI on interval and handle terminal events.
+- Used `ProcessResolver` to populate names in the TUI table.
+- Added kill confirmation dialog logic.
+- Moved `005-tui-scaffolding.md` to `done/`.
+
+2026-03-20 04:48 - Enhanced Task 005: TUI Scaffolding (Ratatui MVP).
+- Integrated layout details, color palette, and event constraints based on TUI and Style Guide PRDs.
+- Specified UI states, table columns, dynamic resizing, and double-buffering requirements.
+
 2026-03-20 23:30 - Created Task 005: TUI Scaffolding (Ratatui MVP).
 - Proposed a plan to replace basic `info!` logging with a functional `Ratatui` terminal interface.
 - Outlined strategy for `App` state management and 1Hz UI refresh cycles.

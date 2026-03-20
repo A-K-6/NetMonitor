@@ -6,6 +6,8 @@
 pub struct TrafficStats {
     pub bytes_sent: u64,
     pub packets_sent: u64,
+    pub bytes_recv: u64,
+    pub packets_recv: u64,
 }
 
 #[cfg(feature = "user")]
