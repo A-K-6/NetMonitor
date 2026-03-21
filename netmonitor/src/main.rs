@@ -14,7 +14,7 @@ use aya::programs::KProbe;
 use aya::Ebpf;
 use aya_log::EbpfLogger;
 use caps::{CapSet, Capability, has_cap};
-use crossterm::event::{Event, KeyCode, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEventKind, MouseButton};
 use netmonitor_common::{TrafficStats, ConnectionKey};
 use process::ProcessResolver;
 use std::env;
@@ -112,189 +112,240 @@ async fn main() -> Result<(), anyhow::Error> {
             .unwrap_or_else(|| Duration::from_secs(0));
 
         if let Some(event) = terminal.handle_events(timeout)? {
-            if let Event::Key(key) = event {
-                // Clear status message on any key press
-                app.status_message = None;
+            match event {
+                Event::Key(key) => {
+                    // Clear status message on any key press
+                    app.status_message = None;
 
-                if app.show_help {
-                    match key.code {
-                        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
-                            app.show_help = false;
+                    if app.show_help {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+                                app.show_help = false;
+                            }
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                } else if app.show_alerts {
-                    match key.code {
-                        KeyCode::Esc | KeyCode::Char('A') | KeyCode::Char('q') => {
-                            app.show_alerts = false;
+                    } else if app.show_alerts {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('A') | KeyCode::Char('q') => {
+                                app.show_alerts = false;
+                            }
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                } else if app.show_threshold_dialog {
-                    match key.code {
-                        KeyCode::Char(c) if c.is_digit(10) => {
-                            app.threshold_input.push(c);
-                        }
-                        KeyCode::Backspace => {
-                            app.threshold_input.pop();
-                        }
-                        KeyCode::Enter => {
-                            if let Some(i) = app.table_state.selected() {
-                                if let Some(row) = app.process_data.get(i) {
-                                    if let Ok(val) = app.threshold_input.parse::<u64>() {
-                                        if val > 0 {
-                                            app.thresholds.insert(row.pid, val);
-                                            app.status_message = Some(format!("Set threshold for {} to {} KB/s", row.name, val));
-                                        } else {
-                                            app.thresholds.remove(&row.pid);
-                                            app.status_message = Some(format!("Removed threshold for {}", row.name));
+                    } else if app.show_threshold_dialog {
+                        match key.code {
+                            KeyCode::Char(c) if c.is_digit(10) => {
+                                app.threshold_input.push(c);
+                            }
+                            KeyCode::Backspace => {
+                                app.threshold_input.pop();
+                            }
+                            KeyCode::Enter => {
+                                if let Some(i) = app.table_state.selected() {
+                                    if let Some(row) = app.process_data.get(i) {
+                                        if let Ok(val) = app.threshold_input.parse::<u64>() {
+                                            if val > 0 {
+                                                app.thresholds.insert(row.pid, val);
+                                                app.status_message = Some(format!("Set threshold for {} to {} KB/s", row.name, val));
+                                            } else {
+                                                app.thresholds.remove(&row.pid);
+                                                app.status_message = Some(format!("Removed threshold for {}", row.name));
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            app.show_threshold_dialog = false;
-                            app.threshold_input.clear();
-                        }
-                        KeyCode::Esc => {
-                            app.show_threshold_dialog = false;
-                            app.threshold_input.clear();
-                        }
-                        _ => {}
-                    }
-                } else if app.show_theme_dialog {
-                    match key.code {
-                        KeyCode::Up => app.previous_theme(),
-                        KeyCode::Down => app.next_theme(),
-                        KeyCode::Enter => {
-                            app.apply_theme();
-                            app.show_theme_dialog = false;
-                        }
-                        KeyCode::Esc | KeyCode::Char('t') => {
-                            app.show_theme_dialog = false;
-                        }
-                        _ => {}
-                    }
-                } else if app.is_filtering {
-                    match key.code {
-                        KeyCode::Char(c) => {
-                            app.filter_text.push(c);
-                        }
-                        KeyCode::Backspace => {
-                            app.filter_text.pop();
-                        }
-                        KeyCode::Esc | KeyCode::Enter => {
-                            app.is_filtering = false;
-                        }
-                        _ => {}
-                    }
-                } else if app.show_kill_dialog {
-                    match key.code {
-                        KeyCode::Char('y') => {
-                            if let Some(i) = app.table_state.selected() {
-                                if let Some(row) = app.process_data.get(i) {
-                                    unsafe {
-                                        if libc::kill(row.pid as libc::pid_t, libc::SIGKILL) == 0 {
-                                            app.status_message = Some(format!("Killed PID {}", row.pid));
-                                        } else {
-                                            app.status_message = Some(format!("Failed to kill PID {}", row.pid));
-                                        }
-                                    }
-                                }
-                            }
-                            app.show_kill_dialog = false;
-                        }
-                        KeyCode::Char('n') | KeyCode::Esc => {
-                            app.show_kill_dialog = false;
-                        }
-                        _ => {}
-                    }
-                } else if app.show_graph {
-                    match key.code {
-                        KeyCode::Esc | KeyCode::Char('g') | KeyCode::Char('q') => {
-                            app.show_graph = false;
-                        }
-                        KeyCode::Tab => {
-                            app.graph_time_range = match app.graph_time_range {
-                                TimeRange::TenMinutes => TimeRange::OneHour,
-                                TimeRange::OneHour => TimeRange::TwentyFourHours,
-                                TimeRange::TwentyFourHours => TimeRange::TenMinutes,
-                            };
-                            // Refetch data
-                            if let Some(i) = app.table_state.selected() {
-                                if let Some(row) = app.process_data.get(i) {
-                                    if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
-                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                        app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
-                                        app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
-                                    }
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                } else {
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => {
-                            app.is_running = false;
-                        }
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.is_running = false;
-                        }
-                        KeyCode::Char('/') | KeyCode::Char('f') => {
-                            app.is_filtering = true;
-                        }
-                        KeyCode::Down => app.next(),
-                        KeyCode::Up => app.previous(),
-                        KeyCode::Enter => {
-                            app.show_detail = !app.show_detail;
-                        }
-                        KeyCode::Char('g') => {
-                            if let Some(i) = app.table_state.selected() {
-                                if let Some(row) = app.process_data.get(i) {
-                                    app.show_graph = true;
-                                    // Fetch data
-                                    if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
-                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                        app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
-                                        app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
-                                    }
-                                }
-                            }
-                        }
-                        KeyCode::Char('k') => {
-                            if app.table_state.selected().is_some() {
-                                app.show_kill_dialog = true;
-                            }
-                        }
-                        KeyCode::Char('s') => {
-                            // Cycle sort columns
-                            let next_col = match app.sort_column {
-                                Column::Pid => Column::Name,
-                                Column::Name => Column::Up,
-                                Column::Up => Column::Down,
-                                Column::Down => Column::Total,
-                                Column::Total => Column::Pid,
-                            };
-                            app.toggle_sort(next_col);
-                        }
-                        KeyCode::Char('?') | KeyCode::Char('h') => {
-                            app.show_help = true;
-                        }
-                        KeyCode::Char('a') => {
-                            if app.table_state.selected().is_some() {
-                                app.show_threshold_dialog = true;
+                                app.show_threshold_dialog = false;
                                 app.threshold_input.clear();
                             }
+                            KeyCode::Esc => {
+                                app.show_threshold_dialog = false;
+                                app.threshold_input.clear();
+                            }
+                            _ => {}
                         }
-                        KeyCode::Char('A') => {
-                            app.show_alerts = !app.show_alerts;
+                    } else if app.show_theme_dialog {
+                        match key.code {
+                            KeyCode::Up => app.previous_theme(),
+                            KeyCode::Down => app.next_theme(),
+                            KeyCode::Enter => {
+                                app.apply_theme();
+                                app.show_theme_dialog = false;
+                            }
+                            KeyCode::Esc | KeyCode::Char('t') => {
+                                app.show_theme_dialog = false;
+                            }
+                            _ => {}
                         }
-                        KeyCode::Char('t') => {
-                            app.show_theme_dialog = !app.show_theme_dialog;
+                    } else if app.is_filtering {
+                        match key.code {
+                            KeyCode::Char(c) => {
+                                app.filter_text.push(c);
+                            }
+                            KeyCode::Backspace => {
+                                app.filter_text.pop();
+                            }
+                            KeyCode::Esc | KeyCode::Enter => {
+                                app.is_filtering = false;
+                            }
+                            _ => {}
+                        }
+                    } else if app.show_kill_dialog {
+                        match key.code {
+                            KeyCode::Char('y') => {
+                                if let Some(i) = app.table_state.selected() {
+                                    if let Some(row) = app.process_data.get(i) {
+                                        unsafe {
+                                            if libc::kill(row.pid as libc::pid_t, libc::SIGKILL) == 0 {
+                                                app.status_message = Some(format!("Killed PID {}", row.pid));
+                                            } else {
+                                                app.status_message = Some(format!("Failed to kill PID {}", row.pid));
+                                            }
+                                        }
+                                    }
+                                }
+                                app.show_kill_dialog = false;
+                            }
+                            KeyCode::Char('n') | KeyCode::Esc => {
+                                app.show_kill_dialog = false;
+                            }
+                            _ => {}
+                        }
+                    } else if app.show_graph {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('g') | KeyCode::Char('q') => {
+                                app.show_graph = false;
+                            }
+                            KeyCode::Tab => {
+                                app.graph_time_range = match app.graph_time_range {
+                                    TimeRange::TenMinutes => TimeRange::OneHour,
+                                    TimeRange::OneHour => TimeRange::TwentyFourHours,
+                                    TimeRange::TwentyFourHours => TimeRange::TenMinutes,
+                                };
+                                // Refetch data
+                                if let Some(i) = app.table_state.selected() {
+                                    if let Some(row) = app.process_data.get(i) {
+                                        if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
+                                            let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                            app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
+                                            app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => {
+                                app.is_running = false;
+                            }
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                app.is_running = false;
+                            }
+                            KeyCode::Char('/') | KeyCode::Char('f') => {
+                                app.is_filtering = true;
+                            }
+                            KeyCode::Down => app.next(),
+                            KeyCode::Up => app.previous(),
+                            KeyCode::Enter => {
+                                app.show_detail = !app.show_detail;
+                            }
+                            KeyCode::Char('g') => {
+                                if let Some(i) = app.table_state.selected() {
+                                    if let Some(row) = app.process_data.get(i) {
+                                        app.show_graph = true;
+                                        // Fetch data
+                                        if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
+                                            let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                            app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
+                                            app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                        }
+                                    }
+                                }
+                            }
+                            KeyCode::Char('k') => {
+                                if app.table_state.selected().is_some() {
+                                    app.show_kill_dialog = true;
+                                }
+                            }
+                            KeyCode::Char('s') => {
+                                // Cycle sort columns
+                                let next_col = match app.sort_column {
+                                    Column::Pid => Column::Name,
+                                    Column::Name => Column::Up,
+                                    Column::Up => Column::Down,
+                                    Column::Down => Column::Total,
+                                    Column::Total => Column::Pid,
+                                };
+                                app.toggle_sort(next_col);
+                            }
+                            KeyCode::Char('?') | KeyCode::Char('h') => {
+                                app.show_help = true;
+                            }
+                            KeyCode::Char('a') => {
+                                if app.table_state.selected().is_some() {
+                                    app.show_threshold_dialog = true;
+                                    app.threshold_input.clear();
+                                }
+                            }
+                            KeyCode::Char('A') => {
+                                app.show_alerts = !app.show_alerts;
+                            }
+                            KeyCode::Char('t') => {
+                                app.show_theme_dialog = !app.show_theme_dialog;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Event::Mouse(mouse) => {
+                    match mouse.kind {
+                        MouseEventKind::ScrollUp => {
+                            if app.show_theme_dialog {
+                                app.previous_theme();
+                            } else {
+                                app.previous();
+                            }
+                        }
+                        MouseEventKind::ScrollDown => {
+                            if app.show_theme_dialog {
+                                app.next_theme();
+                            } else {
+                                app.next();
+                            }
+                        }
+                        MouseEventKind::Down(MouseButton::Left) => {
+                            app.status_message = None;
+                            if app.show_theme_dialog {
+                                let size = terminal.size().unwrap_or_default();
+                                let area = ui::centered_rect(30, 40, size);
+                                if mouse.column >= area.x && mouse.column < area.x + area.width && mouse.row >= area.y && mouse.row < area.y + area.height {
+                                    let content_y = area.y + 1;
+                                    if mouse.row >= content_y && mouse.row < area.y + area.height - 1 {
+                                        let idx = (mouse.row - content_y) as usize;
+                                        if idx < theme::ThemeType::all().len() {
+                                            app.theme_state.select(Some(idx));
+                                        }
+                                    }
+                                }
+                            } else if !app.show_help && !app.show_alerts && !app.show_kill_dialog && !app.show_graph && !app.show_threshold_dialog && !app.show_detail {
+                                let size = terminal.size().unwrap_or_default();
+                                let table_rect = ui::get_table_rect(size, app.is_filtering);
+                                if mouse.column >= table_rect.x && mouse.column < table_rect.x + table_rect.width && mouse.row >= table_rect.y && mouse.row < table_rect.y + table_rect.height {
+                                    let content_y = table_rect.y + 3; // border + header
+                                    if mouse.row >= content_y && mouse.row < table_rect.y + table_rect.height - 1 {
+                                        let offset = app.table_state.offset();
+                                        let row_idx = (mouse.row - content_y) as usize + offset;
+                                        if row_idx < app.process_data.len() {
+                                            app.table_state.select(Some(row_idx));
+                                        }
+                                    }
+                                }
+                            }
                         }
                         _ => {}
                     }
                 }
+                _ => {}
             }
         }
 

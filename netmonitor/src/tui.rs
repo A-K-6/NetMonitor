@@ -31,6 +31,10 @@ impl Tui {
         Ok(())
     }
 
+    pub fn size(&self) -> io::Result<ratatui::layout::Rect> {
+        self.terminal.size()
+    }
+
     pub fn handle_events(&self, timeout: Duration) -> io::Result<Option<Event>> {
         if event::poll(timeout)? {
             Ok(Some(event::read()?))

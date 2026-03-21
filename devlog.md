@@ -1,3 +1,17 @@
+2026-03-21 12:45 - Proposed Task 019: Extended Mouse Support.
+- Created `docs/ideas/todo/019-extended-mouse-support.md`.
+- Planned implementation of clickable table headers to toggle sorting by PID, Name, Up/Down rate, or Total.
+- Planned adding click support for interactive dialog buttons (e.g., "y/n" in Kill dialog).
+- Planned research into coordinate mapping for dynamic column widths.
+
+2026-03-21 12:15 - Completed Task 018: Mouse Support (Click & Scroll).
+- Implemented `Event::Mouse` handling in `netmonitor/src/main.rs`.
+- Added `MouseEventKind::ScrollUp` and `ScrollDown` for process table and theme selector navigation.
+- Implemented click-to-select for the main process table and theme selector dialog using coordinate hit-testing.
+- Exposed `get_table_rect` and `centered_rect` in `netmonitor/src/ui.rs` for userspace layout calculations.
+- Exposed `Tui::size()` in `netmonitor/src/tui.rs`.
+- Verified changes with `cargo check`.
+
 2026-03-21 11:00 - Proposed Task 018: Mouse Support (Click & Scroll).
 - Created `docs/ideas/todo/018-mouse-support.md`.
 - Planned implementation of mouse event capture and basic scrolling for the process table.
