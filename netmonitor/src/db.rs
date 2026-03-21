@@ -41,7 +41,55 @@ impl DbManager {
             [],
         )?;
 
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_traffic_log_timestamp ON traffic_log(timestamp)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_traffic_log_pid_timestamp ON traffic_log(pid, timestamp)",
+            [],
+        )?;
+
         Ok(())
+    }
+
+    pub fn get_aggregated_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<HashMap<u32, ProcessRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT 
+                p.pid, 
+                p.name, 
+                SUM(tl.up_bytes) as total_up, 
+                SUM(tl.down_bytes) as total_down 
+             FROM traffic_log tl
+             JOIN processes p ON tl.pid = p.pid
+             WHERE tl.timestamp BETWEEN ?1 AND ?2
+             GROUP BY tl.pid, p.name"
+        )?;
+
+        let process_iter = stmt.query_map(params![start, end], |row| {
+            let pid: u32 = row.get(0)?;
+            let name: String = row.get(1)?;
+            let total_up: u64 = row.get(2)?;
+            let total_down: u64 = row.get(3)?;
+            
+            Ok((pid, ProcessRow {
+                pid,
+                name,
+                up_bytes: total_up, 
+                down_bytes: total_down,
+                total_bytes: total_up + total_down,
+                last_up_bytes: 0,
+                last_down_bytes: 0,
+            }))
+        })?;
+
+        let mut stats = HashMap::new();
+        for process in process_iter {
+            let (pid, row) = process?;
+            stats.insert(pid, row);
+        }
+        Ok(stats)
     }
 
     pub fn get_traffic_history(&self, pid: u32, range: TimeRange) -> Result<Vec<(DateTime<Utc>, u64, u64)>> {
@@ -181,5 +229,39 @@ mod tests {
         assert_eq!(stats.len(), 2);
         assert_eq!(stats.get(&1).unwrap().total_bytes, 150);
         assert_eq!(stats.get(&2).unwrap().total_bytes, 300);
+    }
+
+    #[test]
+    fn test_get_aggregated_stats() {
+        let mut db = DbManager::new(":memory:").unwrap();
+        let now = Utc::now();
+        let start = now - chrono::Duration::hours(2);
+        let end = now;
+
+        // Add some data
+        let mut stmt_proc = db.conn.prepare(
+            "INSERT INTO processes (pid, name, first_seen, last_seen, total_up, total_down)
+             VALUES (?1, ?2, ?3, ?3, ?4, ?5)"
+        ).unwrap();
+        stmt_proc.execute(params![100, "proc1", now, 0, 0]).unwrap();
+        
+        let mut stmt_log = db.conn.prepare(
+            "INSERT INTO traffic_log (pid, timestamp, up_bytes, down_bytes)
+             VALUES (?1, ?2, ?3, ?4)"
+        ).unwrap();
+        
+        // Log inside range
+        stmt_log.execute(params![100, now - chrono::Duration::minutes(30), 100, 50]).unwrap();
+        stmt_log.execute(params![100, now - chrono::Duration::minutes(15), 200, 100]).unwrap();
+        
+        // Log outside range
+        stmt_log.execute(params![100, now - chrono::Duration::hours(3), 500, 250]).unwrap();
+
+        let stats = db.get_aggregated_stats(start, end).unwrap();
+        assert_eq!(stats.len(), 1);
+        let row = stats.get(&100).unwrap();
+        assert_eq!(row.up_bytes, 300);
+        assert_eq!(row.down_bytes, 150);
+        assert_eq!(row.total_bytes, 450);
     }
 }

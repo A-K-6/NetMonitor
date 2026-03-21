@@ -38,7 +38,7 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
     - [x] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
     - [x] **Mouse Support:** Basic click-to-select and scroll support for the process table.
     - [x] **Extended Mouse Support:** Clickable table headers for sorting and interactive dialog elements.
-    - [ ] **Time-Travel/Historical Analysis:** Ability to select specific time frames from the database to analyze past network activity.
+    - [x] **Time-Travel/Historical Analysis:** Ability to select specific time frames from the database to analyze past network activity.
     - [ ] **Global Dashboard (Overall View):** Comprehensive system-wide analysis with aggregated protocol stats, top-talkers, and network health metrics.
     - [ ] **Tabbed Navigation:** Implement a tabbed interface to seamlessly switch between "Global Dashboard", "Process Monitor", and "Alerts".
     - [ ] **Graph UI Overhaul:** Enhanced visualization with better axes, legends, and multi-process overlay support.
