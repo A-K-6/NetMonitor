@@ -12,7 +12,7 @@ use ratatui::{
 
 pub fn render(f: &mut Frame, app: &mut App) {
     let size = f.size();
-    let theme = &app.current_theme;
+    let theme = app.current_theme;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -108,79 +108,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
         f.render_widget(search_bar, main_chunks[0]);
     }
 
-    // Main table
-    let selected_style = Style::default()
-        .fg(theme.highlight_fg)
-        .bg(theme.highlight_bg)
-        .add_modifier(Modifier::BOLD);
-    let normal_style = Style::default().fg(theme.row_fg);
-
-    let up_label = if app.historical_view_mode { "UP (KB)" } else { "UP (KB/s)" };
-    let down_label = if app.historical_view_mode { "DOWN (KB)" } else { "DOWN (KB/s)" };
-
-    let header_cells = ["PID", "NAME", up_label, down_label, "TOTAL (KB)"]
-        .into_iter()
-        .enumerate()
-        .map(|(i, h)| {
-            let col = match i {
-                0 => Column::Pid,
-                1 => Column::Name,
-                2 => Column::Up,
-                3 => Column::Down,
-                _ => Column::Total,
-            };
-            let mut text = h.to_string();
-            if app.sort_column == col {
-                text.insert_str(0, if app.sort_desc { "↓ " } else { "↑ " });
-            }
-            if i >= 2 {
-                Cell::from(Line::from(text).alignment(Alignment::Right)).style(Style::default().fg(theme.header_fg))
-            } else {
-                Cell::from(text).style(Style::default().fg(theme.header_fg))
-            }
-        });
-    let table_header = Row::new(header_cells)
-        .style(normal_style)
-        .height(1)
-        .bottom_margin(1);
-
-    let rows: Vec<Row> = app.process_data.iter().map(|item| {
-        let up = item.up_bytes as f64 / 1024.0;
-        let down = item.down_bytes as f64 / 1024.0;
-        let total = item.total_bytes as f64 / 1024.0;
-
-        let threshold = app.thresholds.get(&item.pid);
-        let exceeded = threshold.map_or(false, |&t| (up + down) > t as f64);
-
-        let base_style = if exceeded {
-            Style::default().fg(theme.alert_fg).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(theme.row_fg)
-        };
-
-        let cells = vec![
-            Cell::from(item.pid.to_string()).style(base_style),
-            Cell::from(item.name.clone()).style(base_style),
-            Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.upload_fg) }),
-            Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.download_fg) }),
-            Cell::from(Line::from(format!("{:.2}", total)).alignment(Alignment::Right)).style(base_style),
-        ];
-        Row::new(cells).height(1).bottom_margin(0)
-    }).collect();
-
-    // Check if terminal is small
-    let widths = get_column_widths(size);
-
-    let table = Table::new(rows, widths)
-        .header(table_header)
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title(if app.historical_view_mode { "Processes (Historical)" } else { "Processes" })
-            .border_style(Style::default().fg(theme.border_fg)))
-        .highlight_style(selected_style)
-        .highlight_symbol(">> ");
-
-    f.render_stateful_widget(table, main_chunks[1], &mut app.table_state);
+    match app.view_mode {
+        crate::app::ViewMode::ProcessTable => render_process_table(f, app, main_chunks[1]),
+        crate::app::ViewMode::Dashboard => render_dashboard(f, app, main_chunks[1]),
+    }
 
     // Footer
     let footer_text = if app.is_filtering {
@@ -197,8 +128,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
         format!("STATUS: {} | Press any key to clear", msg)
     } else if app.historical_view_mode {
         "q/Esc/H: Exit Historical | s: Sort | /: Filter | Enter: Details | ?: Help".to_string()
+    } else if app.view_mode == crate::app::ViewMode::Dashboard {
+        "Tab: Switch View | q: Quit | t: Theme | ?: Help".to_string()
     } else {
-        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | A: Alerts | t: Theme | ?: Help".to_string()
+        "Tab: Switch View | q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | A: Alerts | t: Theme | ?: Help".to_string()
     };
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(theme.status_fg))
@@ -270,6 +203,205 @@ pub fn render(f: &mut Frame, app: &mut App) {
         render_historical_dialog(f, app, size);
     }
 }
+
+fn render_process_table(f: &mut Frame, app: &mut App, area: Rect) {
+    let theme = &app.current_theme;
+    let selected_style = Style::default()
+        .fg(theme.highlight_fg)
+        .bg(theme.highlight_bg)
+        .add_modifier(Modifier::BOLD);
+    let normal_style = Style::default().fg(theme.row_fg);
+
+    let up_label = if app.historical_view_mode { "UP (KB)" } else { "UP (KB/s)" };
+    let down_label = if app.historical_view_mode { "DOWN (KB)" } else { "DOWN (KB/s)" };
+
+    let header_cells = ["PID", "NAME", up_label, down_label, "TOTAL (KB)"]
+        .into_iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let col = match i {
+                0 => Column::Pid,
+                1 => Column::Name,
+                2 => Column::Up,
+                3 => Column::Down,
+                _ => Column::Total,
+            };
+            let mut text = h.to_string();
+            if app.sort_column == col {
+                text.insert_str(0, if app.sort_desc { "↓ " } else { "↑ " });
+            }
+            if i >= 2 {
+                Cell::from(Line::from(text).alignment(Alignment::Right)).style(Style::default().fg(theme.header_fg))
+            } else {
+                Cell::from(text).style(Style::default().fg(theme.header_fg))
+            }
+        });
+    let table_header = Row::new(header_cells)
+        .style(normal_style)
+        .height(1)
+        .bottom_margin(1);
+
+    let rows: Vec<Row> = app.process_data.iter().map(|item| {
+        let up = item.up_bytes as f64 / 1024.0;
+        let down = item.down_bytes as f64 / 1024.0;
+        let total = item.total_bytes as f64 / 1024.0;
+
+        let threshold = app.thresholds.get(&item.pid);
+        let exceeded = threshold.map_or(false, |&t| (up + down) > t as f64);
+
+        let base_style = if exceeded {
+            Style::default().fg(theme.alert_fg).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.row_fg)
+        };
+
+        let cells = vec![
+            Cell::from(item.pid.to_string()).style(base_style),
+            Cell::from(item.name.clone()).style(base_style),
+            Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.upload_fg) }),
+            Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.download_fg) }),
+            Cell::from(Line::from(format!("{:.2}", total)).alignment(Alignment::Right)).style(base_style),
+        ];
+        Row::new(cells).height(1).bottom_margin(0)
+    }).collect();
+
+    let widths = get_column_widths(f.size());
+
+    let table = Table::new(rows, widths)
+        .header(table_header)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(if app.historical_view_mode { "Processes (Historical)" } else { "Processes" })
+            .border_style(Style::default().fg(theme.border_fg)))
+        .highlight_style(selected_style)
+        .highlight_symbol(">> ");
+
+    f.render_stateful_widget(table, area, &mut app.table_state);
+}
+
+fn render_dashboard(f: &mut Frame, app: &App, area: Rect) {
+    let theme = &app.current_theme;
+    
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(10), // Top aggregates
+            Constraint::Min(0),    // Bottom details
+        ])
+        .split(area);
+
+    let top_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(50), // Traffic Info
+            Constraint::Percentage(50), // Protocol Breakdown
+        ])
+        .split(chunks[0]);
+
+    // Traffic Aggregates
+    let up_kbs = app.total_upload as f64 / 1024.0;
+    let down_kbs = app.total_download as f64 / 1024.0;
+    let traffic_text = vec![
+        Line::from(vec![
+            Span::styled("Total Upload:   ", Style::default().fg(theme.header_fg)),
+            Span::styled(format!("{:.1} KB/s", up_kbs), Style::default().fg(theme.upload_fg).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled("Total Download: ", Style::default().fg(theme.header_fg)),
+            Span::styled(format!("{:.1} KB/s", down_kbs), Style::default().fg(theme.download_fg).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("System Status:  ", Style::default().fg(theme.header_fg)),
+            Span::styled("Monitoring Active", Style::default().fg(theme.status_fg)),
+        ]),
+        Line::from(vec![
+            Span::styled("Alerts Triggered: ", Style::default().fg(theme.header_fg)),
+            Span::styled(app.alerts.len().to_string(), Style::default().fg(if app.alerts.is_empty() { theme.status_fg } else { theme.alert_fg })),
+        ]),
+    ];
+    let traffic_block = Paragraph::new(traffic_text)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(" System Summary ")
+            .border_style(Style::default().fg(theme.border_fg)));
+    f.render_widget(traffic_block, top_chunks[0]);
+
+    // Protocol Distribution
+    let mut protos: Vec<ListItem> = app.protocol_stats.iter().map(|(proto, (up, down))| {
+        let name = match proto {
+            6 => "TCP",
+            17 => "UDP",
+            1 => "ICMP",
+            _ => "OTHER",
+        };
+        let total = (up + down) as f64 / 1024.0;
+        ListItem::new(format!("{:<6} {:>10.1} KB total", name, total))
+            .style(Style::default().fg(theme.row_fg))
+    }).collect();
+    if protos.is_empty() {
+        protos.push(ListItem::new("No active traffic data").style(Style::default().fg(theme.status_fg)));
+    }
+    let proto_list = List::new(protos)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(" Protocol Distribution (Lifetime) ")
+            .border_style(Style::default().fg(theme.border_fg)));
+    f.render_widget(proto_list, top_chunks[1]);
+
+    let bottom_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(50), // Top Talkers
+            Constraint::Percentage(50), // Geo Summary
+        ])
+        .split(chunks[1]);
+
+    // Top Talkers (Mini Table)
+    let mut talkers = app.process_history.values().collect::<Vec<_>>();
+    talkers.sort_by(|a, b| b.total_bytes.cmp(&a.total_bytes));
+    let talker_rows: Vec<Row> = talkers.iter().take(10).map(|p| {
+        Row::new(vec![
+            Cell::from(p.pid.to_string()),
+            Cell::from(p.name.clone()),
+            Cell::from(Line::from(format!("{:.1} KB", p.total_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
+        ]).style(Style::default().fg(theme.row_fg))
+    }).collect();
+    let talker_table = Table::new(talker_rows, [
+        Constraint::Length(8),
+        Constraint::Min(0),
+        Constraint::Length(15),
+    ])
+    .header(Row::new(vec!["PID", "Process", "Total Traffic"]).style(Style::default().fg(theme.header_fg)))
+    .block(Block::default()
+        .borders(Borders::ALL)
+        .title(" Top Talkers ")
+        .border_style(Style::default().fg(theme.border_fg)));
+    f.render_widget(talker_table, bottom_chunks[0]);
+
+    // Geo Summary
+    let mut countries: Vec<(String, u64)> = app.country_stats.iter()
+        .map(|(c, (up, down))| (c.clone(), up + down))
+        .collect();
+    countries.sort_by(|a, b| b.1.cmp(&a.1));
+    let country_rows: Vec<Row> = countries.iter().take(10).map(|(c, total)| {
+        Row::new(vec![
+            Cell::from(if c.is_empty() { "Local/Unknown".to_string() } else { c.clone() }),
+            Cell::from(Line::from(format!("{:.1} KB", *total as f64 / 1024.0)).alignment(Alignment::Right)),
+        ]).style(Style::default().fg(theme.row_fg))
+    }).collect();
+    let country_table = Table::new(country_rows, [
+        Constraint::Min(0),
+        Constraint::Length(15),
+    ])
+    .header(Row::new(vec!["Country", "Total Traffic"]).style(Style::default().fg(theme.header_fg)))
+    .block(Block::default()
+        .borders(Borders::ALL)
+        .title(" Top Destinations ")
+        .border_style(Style::default().fg(theme.border_fg)));
+    f.render_widget(country_table, bottom_chunks[1]);
+}
+
 
 pub fn get_table_rect(size: Rect, is_filtering: bool) -> Rect {
     let chunks = Layout::default()
