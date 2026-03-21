@@ -1,3 +1,18 @@
+2026-03-21 15:30 - Proposed Task 022: Tabbed Navigation (UI Management).
+- Created `docs/ideas/todo/022-tabbed-navigation.md`.
+- Planned implementation of a robust `Tabs` widget to manage multiple screens (Dashboard, Processes, Alerts).
+- Planned navigation via `Tab`/`Shift+Tab` and `F1`-`F3` keys.
+- Planned UI update to include a tab bar below the header.
+
+2026-03-21 15:15 - Completed Task 021: Global Dashboard (Overall View).
+- Implemented `ViewMode` enum and updated `App` state to support multiple view modes.
+- Implemented `render_dashboard` in `ui.rs` providing a high-level system summary.
+- Added real-time aggregation for protocol and country-based traffic statistics.
+- Implemented `Top Talkers` and `Top Destinations` widgets in the dashboard.
+- Added `Tab` keybinding to toggle between Process Table and Global Dashboard.
+- Updated mouse handling to support view switching and differentiated footer actions.
+- Verified compilation and layout consistency.
+
 2026-03-21 14:30 - Proposed Task 021: Global Dashboard (Overall View).
 - Created `docs/ideas/todo/021-global-dashboard.md`.
 - Planned implementation of a high-level summary view (Dashboard) for system-wide network health.

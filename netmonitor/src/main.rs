@@ -340,6 +340,12 @@ async fn main() -> Result<(), anyhow::Error> {
                             KeyCode::Char('t') => {
                                 app.show_theme_dialog = !app.show_theme_dialog;
                             }
+                            KeyCode::Tab => {
+                                app.view_mode = match app.view_mode {
+                                    app::ViewMode::ProcessTable => app::ViewMode::Dashboard,
+                                    app::ViewMode::Dashboard => app::ViewMode::ProcessTable,
+                                };
+                            }
                             _ => {}
                         }
                     }
@@ -400,41 +406,43 @@ async fn main() -> Result<(), anyhow::Error> {
                                     }
                                 }
                             } else if !app.show_help && !app.show_alerts && !app.show_graph && !app.show_threshold_dialog && !app.show_detail {
-                                let table_rect = ui::get_table_rect(size, app.is_filtering);
-                                if mouse.column >= table_rect.x && mouse.column < table_rect.x + table_rect.width && mouse.row >= table_rect.y && mouse.row < table_rect.y + table_rect.height {
-                                    if mouse.row == table_rect.y + 1 {
-                                        // Header clicked
-                                        let inner_rect = table_rect.inner(&Margin { vertical: 1, horizontal: 1 });
-                                        let content_x = inner_rect.x + 3; // Shift by ">> " symbol
-                                        let content_width = inner_rect.width.saturating_sub(3);
-                                        let content_rect = Rect::new(content_x, inner_rect.y, content_width, 1);
-                                        
-                                        let widths = ui::get_column_widths(size);
-                                        let col_rects = Layout::default()
-                                            .direction(Direction::Horizontal)
-                                            .constraints(widths)
-                                            .split(content_rect);
-                                        
-                                        for (i, col_rect) in col_rects.iter().enumerate() {
-                                            if mouse.column >= col_rect.x && mouse.column < col_rect.x + col_rect.width {
-                                                let col = match i {
-                                                    0 => Column::Pid,
-                                                    1 => Column::Name,
-                                                    2 => Column::Up,
-                                                    3 => Column::Down,
-                                                    _ => Column::Total,
-                                                };
-                                                app.toggle_sort(col);
-                                                break;
+                                if app.view_mode == app::ViewMode::ProcessTable {
+                                    let table_rect = ui::get_table_rect(size, app.is_filtering);
+                                    if mouse.column >= table_rect.x && mouse.column < table_rect.x + table_rect.width && mouse.row >= table_rect.y && mouse.row < table_rect.y + table_rect.height {
+                                        if mouse.row == table_rect.y + 1 {
+                                            // Header clicked
+                                            let inner_rect = table_rect.inner(&Margin { vertical: 1, horizontal: 1 });
+                                            let content_x = inner_rect.x + 3; // Shift by ">> " symbol
+                                            let content_width = inner_rect.width.saturating_sub(3);
+                                            let content_rect = Rect::new(content_x, inner_rect.y, content_width, 1);
+                                            
+                                            let widths = ui::get_column_widths(size);
+                                            let col_rects = Layout::default()
+                                                .direction(Direction::Horizontal)
+                                                .constraints(widths)
+                                                .split(content_rect);
+                                            
+                                            for (i, col_rect) in col_rects.iter().enumerate() {
+                                                if mouse.column >= col_rect.x && mouse.column < col_rect.x + col_rect.width {
+                                                    let col = match i {
+                                                        0 => Column::Pid,
+                                                        1 => Column::Name,
+                                                        2 => Column::Up,
+                                                        3 => Column::Down,
+                                                        _ => Column::Total,
+                                                    };
+                                                    app.toggle_sort(col);
+                                                    break;
+                                                }
                                             }
-                                        }
-                                    } else {
-                                        let content_y = table_rect.y + 3; // border + header
-                                        if mouse.row >= content_y && mouse.row < table_rect.y + table_rect.height - 1 {
-                                            let offset = app.table_state.offset();
-                                            let row_idx = (mouse.row - content_y) as usize + offset;
-                                            if row_idx < app.process_data.len() {
-                                                app.table_state.select(Some(row_idx));
+                                        } else {
+                                            let content_y = table_rect.y + 3; // border + header
+                                            if mouse.row >= content_y && mouse.row < table_rect.y + table_rect.height - 1 {
+                                                let offset = app.table_state.offset();
+                                                let row_idx = (mouse.row - content_y) as usize + offset;
+                                                if row_idx < app.process_data.len() {
+                                                    app.table_state.select(Some(row_idx));
+                                                }
                                             }
                                         }
                                     }
@@ -446,9 +454,11 @@ async fn main() -> Result<(), anyhow::Error> {
                                 let footer_rect = ui::get_footer_rect(size);
                                 if mouse.row >= footer_rect.y && mouse.row < footer_rect.y + footer_rect.height {
                                     let text = if app.historical_view_mode {
-                                        "q/Esc/H: Exit Historical | s: Sort | /: Filter | Enter: Details | ?: Help"
+                                        "q/Esc/H: Exit Historical | s: Sort | /: Filter | Enter: Details | ?: Help".to_string()
+                                    } else if app.view_mode == app::ViewMode::Dashboard {
+                                        "Tab: Switch View | q: Quit | t: Theme | ?: Help".to_string()
                                     } else {
-                                        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | A: Alerts | t: Theme | ?: Help"
+                                        "Tab: Switch View | q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | A: Alerts | t: Theme | ?: Help".to_string()
                                     };
                                     let start_x = footer_rect.x + (footer_rect.width.saturating_sub(text.len() as u16)) / 2;
                                     
@@ -475,14 +485,26 @@ async fn main() -> Result<(), anyhow::Error> {
                                         } else if mouse.column >= start_x + 51 && mouse.column < start_x + 58 {
                                             app.show_help = true;
                                         }
-                                    } else {
-                                        if mouse.column >= start_x && mouse.column < start_x + 7 {
+                                    } else if app.view_mode == app::ViewMode::Dashboard {
+                                        if mouse.column >= start_x && mouse.column < start_x + 17 {
+                                            app.view_mode = app::ViewMode::ProcessTable;
+                                        } else if mouse.column >= start_x + 20 && mouse.column < start_x + 27 {
                                             return Ok(());
-                                        } else if mouse.column >= start_x + 10 && mouse.column < start_x + 17 {
+                                        } else if mouse.column >= start_x + 30 && mouse.column < start_x + 38 {
+                                            app.show_theme_dialog = !app.show_theme_dialog;
+                                        } else if mouse.column >= start_x + 41 && mouse.column < start_x + 48 {
+                                            app.show_help = true;
+                                        }
+                                    } else {
+                                        if mouse.column >= start_x && mouse.column < start_x + 17 {
+                                            app.view_mode = app::ViewMode::Dashboard;
+                                        } else if mouse.column >= start_x + 20 && mouse.column < start_x + 27 {
+                                            return Ok(());
+                                        } else if mouse.column >= start_x + 30 && mouse.column < start_x + 37 {
                                             if app.table_state.selected().is_some() {
                                                 app.show_kill_dialog = true;
                                             }
-                                        } else if mouse.column >= start_x + 20 && mouse.column < start_x + 27 {
+                                        } else if mouse.column >= start_x + 40 && mouse.column < start_x + 47 {
                                             let next_col = match app.sort_column {
                                                 Column::Pid => Column::Name,
                                                 Column::Name => Column::Up,
@@ -491,14 +513,14 @@ async fn main() -> Result<(), anyhow::Error> {
                                                 Column::Total => Column::Pid,
                                             };
                                             app.toggle_sort(next_col);
-                                        } else if mouse.column >= start_x + 30 && mouse.column < start_x + 39 {
+                                        } else if mouse.column >= start_x + 50 && mouse.column < start_x + 59 {
                                             app.is_filtering = true;
                                             app.filter_text.clear();
-                                        } else if mouse.column >= start_x + 42 && mouse.column < start_x + 56 {
+                                        } else if mouse.column >= start_x + 62 && mouse.column < start_x + 76 {
                                             if app.table_state.selected().is_some() {
                                                 app.show_detail = true;
                                             }
-                                        } else if mouse.column >= start_x + 59 && mouse.column < start_x + 67 {
+                                        } else if mouse.column >= start_x + 79 && mouse.column < start_x + 87 {
                                             if let Some(i) = app.table_state.selected() {
                                                 if let Some(row) = app.process_data.get(i) {
                                                     app.show_graph = true;
@@ -509,23 +531,24 @@ async fn main() -> Result<(), anyhow::Error> {
                                                     }
                                                 }
                                             }
-                                        } else if mouse.column >= start_x + 70 && mouse.column < start_x + 80 {
+                                        } else if mouse.column >= start_x + 90 && mouse.column < start_x + 100 {
                                             app.show_historical_dialog = true;
-                                        } else if mouse.column >= start_x + 83 && mouse.column < start_x + 91 {
+                                        } else if mouse.column >= start_x + 103 && mouse.column < start_x + 111 {
                                             if app.table_state.selected().is_some() {
                                                 app.show_threshold_dialog = true;
                                                 app.threshold_input.clear();
                                             }
-                                        } else if mouse.column >= start_x + 94 && mouse.column < start_x + 103 {
+                                        } else if mouse.column >= start_x + 114 && mouse.column < start_x + 123 {
                                             app.show_alerts = !app.show_alerts;
-                                        } else if mouse.column >= start_x + 106 && mouse.column < start_x + 114 {
+                                        } else if mouse.column >= start_x + 126 && mouse.column < start_x + 134 {
                                             app.show_theme_dialog = !app.show_theme_dialog;
-                                        } else if mouse.column >= start_x + 117 && mouse.column < start_x + 124 {
+                                        } else if mouse.column >= start_x + 137 && mouse.column < start_x + 144 {
                                             app.show_help = true;
                                         }
                                     }
                                 }
                             }
+
                         }
                         _ => {}
                     }
@@ -615,6 +638,8 @@ async fn main() -> Result<(), anyhow::Error> {
             // Update connections
             if !app.historical_view_mode {
                 app.connections.clear();
+                app.protocol_stats.clear();
+                app.country_stats.clear();
                 for result in connections_map.iter() {
                     if let Ok((key, stats)) = result {
                         use std::net::{Ipv4Addr, IpAddr};
@@ -626,6 +651,15 @@ async fn main() -> Result<(), anyhow::Error> {
                         let (country, isp) = geoip::RESOLVER.resolve(dst_ip_addr);
                         let service = protocol::RESOLVER.resolve(key.proto, key.dst_port);
                         
+                        // Aggregate protocol/country stats
+                        let p_stats = app.protocol_stats.entry(key.proto).or_insert((0, 0));
+                        p_stats.0 += stats.bytes_sent;
+                        p_stats.1 += stats.bytes_recv;
+
+                        let c_stats = app.country_stats.entry(country.clone()).or_insert((0, 0));
+                        c_stats.0 += stats.bytes_sent;
+                        c_stats.1 += stats.bytes_recv;
+
                         // Get cached hostname or trigger resolution
                         let hostname = match dns::RESOLVER.get_cached(dst_ip_addr) {
                             Some(h) => h,

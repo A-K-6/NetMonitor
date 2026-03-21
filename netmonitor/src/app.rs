@@ -106,7 +106,14 @@ impl TimeRange {
     }
 }
 
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum ViewMode {
+    ProcessTable,
+    Dashboard,
+}
+
 pub struct App {
+    pub view_mode: ViewMode,
     pub process_data: Vec<ProcessRow>,
     pub total_upload: u64,
     pub total_download: u64,
@@ -143,6 +150,9 @@ pub struct App {
     pub show_historical_dialog: bool,
     pub historical_range_state: ListState,
     pub historical_data: Vec<ProcessRow>,
+    // Dashboard data
+    pub protocol_stats: HashMap<u32, (u64, u64)>, // Proto -> (Up, Down)
+    pub country_stats: HashMap<String, (u64, u64)>, // Country -> (Up, Down)
 }
 
 impl App {
@@ -154,6 +164,7 @@ impl App {
         historical_range_state.select(Some(0));
 
         Self {
+            view_mode: ViewMode::ProcessTable,
             process_data: Vec::new(),
             total_upload: 0,
             total_download: 0,
@@ -190,6 +201,8 @@ impl App {
             show_historical_dialog: false,
             historical_range_state,
             historical_data: Vec::new(),
+            protocol_stats: HashMap::new(),
+            country_stats: HashMap::new(),
         }
     }
 
