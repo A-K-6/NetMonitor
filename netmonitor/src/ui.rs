@@ -1,8 +1,9 @@
 use crate::app::{App, Column};
+use crate::theme::ThemeType;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect, Alignment},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear, Sparkline, Chart, Axis, Dataset, GraphType},
+    style::{Modifier, Style},
+    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear, Sparkline, Chart, Axis, Dataset, GraphType, List, ListItem},
     text::{Line, Span},
     symbols,
     Frame,
@@ -10,6 +11,7 @@ use ratatui::{
 
 pub fn render(f: &mut Frame, app: &mut App) {
     let size = f.size();
+    let theme = &app.current_theme;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -46,24 +48,33 @@ pub fn render(f: &mut Frame, app: &mut App) {
     }
 
     let header_info = Paragraph::new(header_text)
-        .style(if !app.alerts.is_empty() { Style::default().fg(Color::Red) } else { Style::default().fg(Color::Cyan) })
+        .style(if !app.alerts.is_empty() { Style::default().fg(theme.alert_fg) } else { Style::default().fg(theme.header_fg) })
         .alignment(Alignment::Left)
-        .block(Block::default().borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM).title("NetMonitor"));
+        .block(Block::default()
+            .borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM)
+            .title("NetMonitor")
+            .border_style(Style::default().fg(theme.border_fg)));
     f.render_widget(header_info, header_chunks[0]);
 
     // Sparklines
     let up_data: Vec<u64> = app.history_up.iter().cloned().collect();
     let sparkline_up = Sparkline::default()
-        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM).title("Upload"))
+        .block(Block::default()
+            .borders(Borders::TOP | Borders::BOTTOM)
+            .title("Upload")
+            .border_style(Style::default().fg(theme.border_fg)))
         .data(&up_data)
-        .style(Style::default().fg(Color::Green));
+        .style(Style::default().fg(theme.upload_fg));
     f.render_widget(sparkline_up, header_chunks[1]);
 
     let down_data: Vec<u64> = app.history_down.iter().cloned().collect();
     let sparkline_down = Sparkline::default()
-        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT).title("Download"))
+        .block(Block::default()
+            .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
+            .title("Download")
+            .border_style(Style::default().fg(theme.border_fg)))
         .data(&down_data)
-        .style(Style::default().fg(Color::Yellow));
+        .style(Style::default().fg(theme.download_fg));
     f.render_widget(sparkline_down, header_chunks[2]);
 
     // Main Content
@@ -79,14 +90,20 @@ pub fn render(f: &mut Frame, app: &mut App) {
     if app.is_filtering {
         let search_text = format!(" Filter: {}_ ", app.filter_text);
         let search_bar = Paragraph::new(search_text)
-            .style(Style::default().fg(Color::Yellow))
-            .block(Block::default().borders(Borders::ALL).title("Searching (Enter/Esc to stop)"));
+            .style(Style::default().fg(theme.download_fg))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Searching (Enter/Esc to stop)")
+                .border_style(Style::default().fg(theme.border_fg)));
         f.render_widget(search_bar, main_chunks[0]);
     }
 
     // Main table
-    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
-    let normal_style = Style::default().fg(Color::White);
+    let selected_style = Style::default()
+        .fg(theme.highlight_fg)
+        .bg(theme.highlight_bg)
+        .add_modifier(Modifier::BOLD);
+    let normal_style = Style::default().fg(theme.row_fg);
 
     let header_cells = ["PID", "NAME", "UP (KB/s)", "DOWN (KB/s)", "TOTAL (KB)"]
         .iter()
@@ -104,9 +121,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
                 text.insert_str(0, if app.sort_desc { "↓ " } else { "↑ " });
             }
             if i >= 2 {
-                Cell::from(Line::from(text).alignment(Alignment::Right)).style(Style::default().fg(Color::Blue))
+                Cell::from(Line::from(text).alignment(Alignment::Right)).style(Style::default().fg(theme.header_fg))
             } else {
-                Cell::from(text).style(Style::default().fg(Color::Blue))
+                Cell::from(text).style(Style::default().fg(theme.header_fg))
             }
         });
     let table_header = Row::new(header_cells)
@@ -123,16 +140,16 @@ pub fn render(f: &mut Frame, app: &mut App) {
         let exceeded = threshold.map_or(false, |&t| (up + down) > t as f64);
 
         let base_style = if exceeded {
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.alert_fg).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::White)
+            Style::default().fg(theme.row_fg)
         };
 
         let cells = vec![
             Cell::from(item.pid.to_string()).style(base_style),
             Cell::from(item.name.clone()).style(base_style),
-            Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(Color::Green) }),
-            Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(Color::Yellow) }),
+            Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.upload_fg) }),
+            Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.download_fg) }),
             Cell::from(Line::from(format!("{:.2}", total)).alignment(Alignment::Right)).style(base_style),
         ];
         Row::new(cells).height(1).bottom_margin(0)
@@ -159,7 +176,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     let table = Table::new(rows, widths)
         .header(table_header)
-        .block(Block::default().borders(Borders::ALL).title("Processes"))
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title("Processes")
+            .border_style(Style::default().fg(theme.border_fg)))
         .highlight_style(selected_style)
         .highlight_symbol(">> ");
 
@@ -172,15 +192,19 @@ pub fn render(f: &mut Frame, app: &mut App) {
         format!("Tab: Cycle Range ({}) | g/Esc: Close", app.graph_time_range.label())
     } else if app.show_threshold_dialog {
         "Enter: Set Threshold (KB/s) | Esc: Cancel".to_string()
+    } else if app.show_theme_dialog {
+        "Up/Down: Cycle | Enter: Apply | Esc/t: Close".to_string()
     } else if let Some(msg) = &app.status_message {
         format!("STATUS: {} | Press any key to clear", msg)
     } else {
-        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | a: Alert | A: Alerts | ?: Help".to_string()
+        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | a: Alert | A: Alerts | t: Theme | ?: Help".to_string()
     };
     let footer = Paragraph::new(footer_text)
-        .style(Style::default().fg(Color::DarkGray))
+        .style(Style::default().fg(theme.status_fg))
         .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.border_fg)));
     f.render_widget(footer, chunks[2]);
 
     // Kill Dialog
@@ -189,7 +213,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
         let pid_to_kill = app.table_state.selected().and_then(|i| app.process_data.get(i)).map(|p| p.pid);
         let text = format!("\nAre you sure you want to kill PID {:?}?\n\n(y)es / (n)o", pid_to_kill);
         let dialog = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title("Confirm Kill").style(Style::default().fg(Color::Red)))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Confirm Kill")
+                .style(Style::default().fg(theme.alert_fg))
+                .border_style(Style::default().fg(theme.alert_fg)))
             .alignment(Alignment::Center);
         f.render_widget(Clear, area);
         f.render_widget(dialog, area);
@@ -197,93 +225,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     // Detail View
     if app.show_detail {
-        if let Some(i) = app.table_state.selected() {
-            if let Some(row) = app.process_data.get(i) {
-                let area = centered_rect(80, 70, size);
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Length(8), // Info
-                        Constraint::Min(0),    // Connections Table
-                        Constraint::Length(3), // Footer
-                    ])
-                    .split(area);
-
-                // Info Paragraph
-                let info_text = vec![
-                    format!("PID:        {}", row.pid),
-                    format!("Name:       {}", row.name),
-                    "".to_string(),
-                    format!("Upload:     {:.2} KB/s", row.up_bytes as f64 / 1024.0),
-                    format!("Download:   {:.2} KB/s", row.down_bytes as f64 / 1024.0),
-                    format!("Total Size: {:.2} KB", row.total_bytes as f64 / 1024.0),
-                ].join("\n");
-                let info = Paragraph::new(info_text)
-                    .block(Block::default().borders(Borders::ALL).title("Process Info").style(Style::default().fg(Color::Cyan)));
-
-                // Connections Table
-                let conns = app.connections.get(&row.pid);
-                let conn_header = Row::new(vec![
-                    Cell::from("PROTO"),
-                    Cell::from("SERVICE"),
-                    Cell::from("LOCAL ADDR"),
-                    Cell::from("REMOTE HOST/IP"),
-                    Cell::from("GEO"),
-                    Cell::from("ISP"),
-                    Cell::from("UP (KB)"),
-                    Cell::from("DOWN (KB)"),
-                ]).style(Style::default().fg(Color::Blue)).height(1);
-
-                let conn_rows: Vec<Row> = match conns {
-                    Some(list) => list.iter().map(|c| {
-                        let proto = match c.proto {
-                            6 => "TCP",
-                            17 => "UDP",
-                            1 => "ICMP",
-                            _ => "RAW",
-                        };
-                        let remote = if let Some(host) = &c.hostname {
-                            format!("{} ({})", host, c.dst_ip)
-                        } else {
-                            format!("{}:{}", c.dst_ip, c.dst_port)
-                        };
-                        Row::new(vec![
-                            Cell::from(proto),
-                            Cell::from(c.service.clone()),
-                            Cell::from(format!("{}:{}", c.src_ip, c.src_port)),
-                            Cell::from(remote),
-                            Cell::from(c.country.clone()),
-                            Cell::from(c.isp.clone()),
-                            Cell::from(Line::from(format!("{:.1}", c.up_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
-                            Cell::from(Line::from(format!("{:.1}", c.down_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
-                        ]).height(1)
-                    }).collect(),
-                    None => vec![Row::new(vec![Cell::from("No active connections detected").style(Style::default().fg(Color::DarkGray))])],
-                };
-
-                let conn_table = Table::new(conn_rows, [
-                    Constraint::Length(6),
-                    Constraint::Length(10),
-                    Constraint::Percentage(15),
-                    Constraint::Percentage(25),
-                    Constraint::Percentage(10),
-                    Constraint::Percentage(10),
-                    Constraint::Percentage(10),
-                    Constraint::Percentage(10),
-                ])
-                .header(conn_header)
-                .block(Block::default().borders(Borders::ALL).title("Active Connections"));
-                
-                f.render_widget(Clear, area);
-                f.render_widget(info, chunks[0]);
-                f.render_widget(conn_table, chunks[1]);
-
-                let footer = Paragraph::new("Press Enter to close")
-                    .alignment(Alignment::Center)
-                    .block(Block::default().borders(Borders::ALL));
-                f.render_widget(footer, chunks[2]);
-            }
-        }
+        render_detail_view(f, app, size);
     }
 
     // Graph View
@@ -293,7 +235,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     // Help Overlay
     if app.show_help {
-        render_help_overlay(f, size);
+        render_help_overlay(f, app, size);
     }
 
     // Threshold Dialog
@@ -302,7 +244,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
         let pid = app.table_state.selected().and_then(|i| app.process_data.get(i)).map(|p| p.pid);
         let text = format!("\nSet bandwidth threshold for PID {:?} (KB/s):\n\n {}_ ", pid, app.threshold_input);
         let dialog = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title("Set Threshold").style(Style::default().fg(Color::Yellow)))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Set Threshold")
+                .style(Style::default().fg(theme.download_fg))
+                .border_style(Style::default().fg(theme.border_fg)))
             .alignment(Alignment::Center);
         f.render_widget(Clear, area);
         f.render_widget(dialog, area);
@@ -312,9 +258,140 @@ pub fn render(f: &mut Frame, app: &mut App) {
     if app.show_alerts {
          render_alerts_overlay(f, app, size);
     }
+
+    // Theme Dialog
+    if app.show_theme_dialog {
+        render_theme_dialog(f, app, size);
+    }
+}
+
+fn render_theme_dialog(f: &mut Frame, app: &mut App, size: Rect) {
+    let area = centered_rect(30, 40, size);
+    f.render_widget(Clear, area);
+
+    let theme = &app.current_theme;
+    let themes = ThemeType::all();
+    let items: Vec<ListItem> = themes.iter().map(|t| {
+        ListItem::new(t.name())
+    }).collect();
+
+    let list = List::new(items)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(" Select Theme ")
+            .border_style(Style::default().fg(theme.header_fg)))
+        .highlight_style(Style::default()
+            .fg(theme.highlight_fg)
+            .bg(theme.highlight_bg)
+            .add_modifier(Modifier::BOLD))
+        .highlight_symbol(">> ");
+
+    f.render_stateful_widget(list, area, &mut app.theme_state);
+}
+
+fn render_detail_view(f: &mut Frame, app: &App, size: Rect) {
+    if let Some(i) = app.table_state.selected() {
+        if let Some(row) = app.process_data.get(i) {
+            let theme = &app.current_theme;
+            let area = centered_rect(80, 70, size);
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(8), // Info
+                    Constraint::Min(0),    // Connections Table
+                    Constraint::Length(3), // Footer
+                ])
+                .split(area);
+
+            // Info Paragraph
+            let info_text = vec![
+                format!("PID:        {}", row.pid),
+                format!("Name:       {}", row.name),
+                "".to_string(),
+                format!("Upload:     {:.2} KB/s", row.up_bytes as f64 / 1024.0),
+                format!("Download:   {:.2} KB/s", row.down_bytes as f64 / 1024.0),
+                format!("Total Size: {:.2} KB", row.total_bytes as f64 / 1024.0),
+            ].join("\n");
+            let info = Paragraph::new(info_text)
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .title("Process Info")
+                    .style(Style::default().fg(theme.header_fg))
+                    .border_style(Style::default().fg(theme.border_fg)));
+
+            // Connections Table
+            let conns = app.connections.get(&row.pid);
+            let conn_header = Row::new(vec![
+                Cell::from("PROTO"),
+                Cell::from("SERVICE"),
+                Cell::from("LOCAL ADDR"),
+                Cell::from("REMOTE HOST/IP"),
+                Cell::from("GEO"),
+                Cell::from("ISP"),
+                Cell::from("UP (KB)"),
+                Cell::from("DOWN (KB)"),
+            ]).style(Style::default().fg(theme.header_fg)).height(1);
+
+            let conn_rows: Vec<Row> = match conns {
+                Some(list) => list.iter().map(|c| {
+                    let proto = match c.proto {
+                        6 => "TCP",
+                        17 => "UDP",
+                        1 => "ICMP",
+                        _ => "RAW",
+                    };
+                    let remote = if let Some(host) = &c.hostname {
+                        format!("{} ({})", host, c.dst_ip)
+                    } else {
+                        format!("{}:{}", c.dst_ip, c.dst_port)
+                    };
+                    Row::new(vec![
+                        Cell::from(proto),
+                        Cell::from(c.service.clone()),
+                        Cell::from(format!("{}:{}", c.src_ip, c.src_port)),
+                        Cell::from(remote),
+                        Cell::from(c.country.clone()),
+                        Cell::from(c.isp.clone()),
+                        Cell::from(Line::from(format!("{:.1}", c.up_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
+                        Cell::from(Line::from(format!("{:.1}", c.down_bytes as f64 / 1024.0)).alignment(Alignment::Right)),
+                    ]).height(1).style(Style::default().fg(theme.row_fg))
+                }).collect(),
+                None => vec![Row::new(vec![Cell::from("No active connections detected").style(Style::default().fg(theme.status_fg))])],
+            };
+
+            let conn_table = Table::new(conn_rows, [
+                Constraint::Length(6),
+                Constraint::Length(10),
+                Constraint::Percentage(15),
+                Constraint::Percentage(25),
+                Constraint::Percentage(10),
+                Constraint::Percentage(10),
+                Constraint::Percentage(10),
+                Constraint::Percentage(10),
+            ])
+            .header(conn_header)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Active Connections")
+                .border_style(Style::default().fg(theme.border_fg)));
+            
+            f.render_widget(Clear, area);
+            f.render_widget(info, chunks[0]);
+            f.render_widget(conn_table, chunks[1]);
+
+            let footer = Paragraph::new("Press Enter to close")
+                .alignment(Alignment::Center)
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.border_fg))
+                    .style(Style::default().fg(theme.status_fg)));
+            f.render_widget(footer, chunks[2]);
+        }
+    }
 }
 
 fn render_alerts_overlay(f: &mut Frame, app: &App, size: Rect) {
+    let theme = &app.current_theme;
     let area = centered_rect(80, 80, size);
     f.render_widget(Clear, area);
 
@@ -325,7 +402,7 @@ fn render_alerts_overlay(f: &mut Frame, app: &App, size: Rect) {
             Cell::from(a.process_name.clone()),
             Cell::from(format!("{} KB/s", a.value)),
             Cell::from(format!("{} KB/s", a.threshold)),
-        ])
+        ]).style(Style::default().fg(theme.row_fg))
     }).collect();
 
     let table = Table::new(rows, [
@@ -336,14 +413,18 @@ fn render_alerts_overlay(f: &mut Frame, app: &App, size: Rect) {
         Constraint::Percentage(20),
     ])
     .header(Row::new(vec!["Time", "PID", "Process", "Value", "Threshold"])
-        .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Red))
+        .style(Style::default().add_modifier(Modifier::BOLD).fg(theme.alert_fg))
         .bottom_margin(1))
-    .block(Block::default().borders(Borders::ALL).title(" Recent Alerts (Press A or Esc to close) "));
+    .block(Block::default()
+        .borders(Borders::ALL)
+        .title(" Recent Alerts (Press A or Esc to close) ")
+        .border_style(Style::default().fg(theme.alert_fg)));
 
     f.render_widget(table, area);
 }
 
-fn render_help_overlay(f: &mut Frame, size: Rect) {
+fn render_help_overlay(f: &mut Frame, app: &App, size: Rect) {
+    let theme = &app.current_theme;
     let area = centered_rect(60, 65, size);
     f.render_widget(Clear, area);
 
@@ -356,25 +437,27 @@ fn render_help_overlay(f: &mut Frame, size: Rect) {
         Row::new(vec![Cell::from("/"), Cell::from("Filter by process name")]),
         Row::new(vec![Cell::from("Enter"), Cell::from("Deep-dive into process connections")]),
         Row::new(vec![Cell::from("g"), Cell::from("Traffic history graph (requires historical data)")]),
+        Row::new(vec![Cell::from("t"), Cell::from("Theme selector")]),
         Row::new(vec![Cell::from("?"), Cell::from("Toggle this help screen")]),
-        Row::new(vec![Cell::from("Up/Down"), Cell::from("Navigate process table")]),
+        Row::new(vec![Cell::from("Up/Down"), Cell::from("Navigate process table / menus")]),
         Row::new(vec![Cell::from("Tab"), Cell::from("Cycle graph time range (when in graph view)")]),
     ];
 
     let help_table = Table::new(help_text, [Constraint::Percentage(30), Constraint::Percentage(70)])
         .header(Row::new(vec![Cell::from("Key"), Cell::from("Action")])
-            .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta))
+            .style(Style::default().add_modifier(Modifier::BOLD).fg(theme.help_fg))
             .bottom_margin(1))
         .block(Block::default()
             .borders(Borders::ALL)
             .title(" Help / Keybindings ")
-            .style(Style::default().fg(Color::Magenta))
-            .border_style(Style::default().fg(Color::Magenta)));
+            .style(Style::default().fg(theme.row_fg))
+            .border_style(Style::default().fg(theme.help_fg)));
 
     f.render_widget(help_table, area);
 }
 
 fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
+    let theme = &app.current_theme;
     let area = centered_rect(90, 80, size);
     f.render_widget(Clear, area);
 
@@ -390,14 +473,14 @@ fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
         .name("Upload (KB/s)")
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
-        .style(Style::default().fg(Color::Green))
+        .style(Style::default().fg(theme.upload_fg))
         .data(&app.graph_data_up);
 
     let down_dataset = Dataset::default()
         .name("Download (KB/s)")
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
-        .style(Style::default().fg(Color::Yellow))
+        .style(Style::default().fg(theme.download_fg))
         .data(&app.graph_data_down);
 
     let max_up = app.graph_data_up.iter().map(|(_, v)| *v).fold(0.0, f64::max);
@@ -407,10 +490,14 @@ fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
     let x_bounds = [0.0, app.graph_time_range.to_seconds() as f64];
     
     let chart = Chart::new(vec![up_dataset, down_dataset])
-        .block(Block::default().borders(Borders::ALL).title(title))
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(Style::default().fg(theme.border_fg))
+            .style(Style::default().fg(theme.row_fg)))
         .x_axis(Axis::default()
             .title("Time (s ago)")
-            .style(Style::default().fg(Color::Gray))
+            .style(Style::default().fg(theme.status_fg))
             .bounds(x_bounds)
             .labels(vec![
                 Span::styled(format!("{:.0}", x_bounds[1]), Style::default()),
@@ -418,7 +505,7 @@ fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
             ]))
         .y_axis(Axis::default()
             .title("KB/s")
-            .style(Style::default().fg(Color::Gray))
+            .style(Style::default().fg(theme.status_fg))
             .bounds([0.0, max_y])
             .labels(vec![
                 Span::styled("0", Style::default()),

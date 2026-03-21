@@ -35,9 +35,8 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Smart Alerts:** System notifications for when a process exceeds a defined bandwidth threshold.
 - [x] **Help Overlay:** A dedicated `?` screen explaining all keybindings and features.
 - [ ] **TUI Refinement:**
-    - [ ] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
+    - [x] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
     - [ ] **Mouse Support:** Basic click-to-select and scroll support for the process table.
-
 ## Phase 4: Stability & Documentation
 *Goal: Professional-grade packaging and rigorous documentation.*
 - [ ] **Performance Audit:** Verify CPU usage remains <1% under heavy network load.

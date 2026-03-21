@@ -61,13 +61,20 @@ A full-screen interactive view (toggle with `g`) for the selected process:
 - **Time Ranges:** Support for toggling between 10 minutes, 1 hour, and 24 hours (via `Tab`).
 - **Metrics:** Separate color-coded lines for "Upload" (Green) and "Download" (Yellow).
 
-### 3.4. Footer (Hotkeys)
+### 3.4. Theme Engine (Customization)
+- **Theme Struct:** Defines colors for headers, rows, highlights, borders, alerts, and sparklines.
+- **Preset Themes:** Includes `Default`, `Dracula`, `Solarized`, `Monokai`, and `High Contrast`.
+- **Theme Selector:** A modal dialog (toggle with `t`) that allows users to cycle through and apply color schemes in real-time.
+
+### 3.5. Footer (Hotkeys)
 - `q`: Quit.
 - `k`: Kill selected process (requires user confirmation).
 - `s`: Change sorting column.
+- `t`: Theme Selector (Select color schemes).
 - `/`: Search/Filter processes by name.
 - `g`: Toggle Graph View for selected process.
 - `Enter`: Toggle "Connection Deep-Dive" detail view for selected process.
+- `?`: Toggle help screen.
 
 ## 4. Input & Events
 NetMonitor uses an event-driven model:
