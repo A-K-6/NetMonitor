@@ -4,7 +4,7 @@ use crate::theme::ThemeType;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect, Alignment},
     style::{Modifier, Style},
-    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear, Sparkline, Chart, Axis, Dataset, GraphType, List, ListItem},
+    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear, Sparkline, Chart, Axis, Dataset, GraphType, List, ListItem, Tabs},
     text::{Line, Span},
     symbols,
     Frame,
@@ -18,6 +18,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Header
+            Constraint::Length(3), // Tabs
             Constraint::Min(5),    // Main
             Constraint::Length(3), // Footer
         ])
@@ -87,6 +88,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .style(Style::default().fg(theme.download_fg));
     f.render_widget(sparkline_down, header_chunks[2]);
 
+    // Tabs
+    render_tabs(f, app, chunks[1]);
+
     // Main Content
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -94,7 +98,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
             if app.is_filtering { Constraint::Length(3) } else { Constraint::Length(0) },
             Constraint::Min(0),
         ])
-        .split(chunks[1]);
+        .split(chunks[2]);
 
     // Search Bar
     if app.is_filtering {
@@ -109,8 +113,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
     }
 
     match app.view_mode {
-        crate::app::ViewMode::ProcessTable => render_process_table(f, app, main_chunks[1]),
         crate::app::ViewMode::Dashboard => render_dashboard(f, app, main_chunks[1]),
+        crate::app::ViewMode::ProcessTable => render_process_table(f, app, main_chunks[1]),
+        crate::app::ViewMode::Alerts => render_alerts_view(f, app, main_chunks[1]),
     }
 
     // Footer
@@ -128,10 +133,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
         format!("STATUS: {} | Press any key to clear", msg)
     } else if app.historical_view_mode {
         "q/Esc/H: Exit Historical | s: Sort | /: Filter | Enter: Details | ?: Help".to_string()
-    } else if app.view_mode == crate::app::ViewMode::Dashboard {
-        "Tab: Switch View | q: Quit | t: Theme | ?: Help".to_string()
     } else {
-        "Tab: Switch View | q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | A: Alerts | t: Theme | ?: Help".to_string()
+        match app.view_mode {
+            crate::app::ViewMode::Dashboard => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
+            crate::app::ViewMode::ProcessTable => "Tab/F1-F3: Switch | q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | t: Theme | ?: Help".to_string(),
+            crate::app::ViewMode::Alerts => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
+        }
     };
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(theme.status_fg))
@@ -139,7 +146,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .block(Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.border_fg)));
-    f.render_widget(footer, chunks[2]);
+    f.render_widget(footer, chunks[3]);
 
     // Kill Dialog
     if app.show_kill_dialog {
@@ -202,6 +209,62 @@ pub fn render(f: &mut Frame, app: &mut App) {
     if app.show_historical_dialog {
         render_historical_dialog(f, app, size);
     }
+}
+
+fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
+    let theme = &app.current_theme;
+    let titles = vec!["[F1] Dashboard", "[F2] Processes", "[F3] Alerts"];
+    let titles_spans: Vec<Line> = titles
+        .iter()
+        .map(|t| Line::from(Span::styled(*t, Style::default().fg(theme.header_fg))))
+        .collect();
+
+    let tabs = Tabs::new(titles_spans)
+        .block(Block::default().borders(Borders::ALL).title(" Views ").border_style(Style::default().fg(theme.border_fg)))
+        .select(match app.view_mode {
+            crate::app::ViewMode::Dashboard => 0,
+            crate::app::ViewMode::ProcessTable => 1,
+            crate::app::ViewMode::Alerts => 2,
+        })
+        .style(Style::default().fg(theme.header_fg))
+        .highlight_style(
+            Style::default()
+                .fg(theme.highlight_fg)
+                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::UNDERLINED),
+        );
+    f.render_widget(tabs, area);
+}
+
+fn render_alerts_view(f: &mut Frame, app: &App, area: Rect) {
+    let theme = &app.current_theme;
+
+    let rows: Vec<Row> = app.alerts.iter().rev().map(|a| {
+        Row::new(vec![
+            Cell::from(a.timestamp.format("%Y-%m-%d %H:%M:%S").to_string()),
+            Cell::from(a.pid.to_string()),
+            Cell::from(a.process_name.clone()),
+            Cell::from(format!("{} KB/s", a.value)),
+            Cell::from(format!("{} KB/s", a.threshold)),
+        ]).style(Style::default().fg(theme.row_fg))
+    }).collect();
+
+    let table = Table::new(rows, [
+        Constraint::Percentage(25),
+        Constraint::Percentage(10),
+        Constraint::Percentage(25),
+        Constraint::Percentage(20),
+        Constraint::Percentage(20),
+    ])
+    .header(Row::new(vec!["Time", "PID", "Process", "Value", "Threshold"])
+        .style(Style::default().add_modifier(Modifier::BOLD).fg(theme.alert_fg))
+        .bottom_margin(1))
+    .block(Block::default()
+        .borders(Borders::ALL)
+        .title(" System Alerts Log ")
+        .border_style(Style::default().fg(theme.border_fg)));
+
+    f.render_widget(table, area);
 }
 
 fn render_process_table(f: &mut Frame, app: &mut App, area: Rect) {
@@ -408,6 +471,7 @@ pub fn get_table_rect(size: Rect, is_filtering: bool) -> Rect {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Header
+            Constraint::Length(3), // Tabs
             Constraint::Min(5),    // Main
             Constraint::Length(3), // Footer
         ])
@@ -419,7 +483,7 @@ pub fn get_table_rect(size: Rect, is_filtering: bool) -> Rect {
             if is_filtering { Constraint::Length(3) } else { Constraint::Length(0) },
             Constraint::Min(0),
         ])
-        .split(chunks[1]);
+        .split(chunks[2]);
 
     main_chunks[1]
 }
@@ -429,11 +493,12 @@ pub fn get_footer_rect(size: Rect) -> Rect {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Header
+            Constraint::Length(3), // Tabs
             Constraint::Min(5),    // Main
             Constraint::Length(3), // Footer
         ])
         .split(size);
-    chunks[2]
+    chunks[3]
 }
 
 pub fn get_column_widths(size: Rect) -> Vec<Constraint> {

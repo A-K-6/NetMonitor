@@ -1,3 +1,17 @@
+2026-03-21 16:15 - Updated Roadmap and Proposed Task 023.
+- Marked Task 022 (Tabbed Navigation) as complete in `ROADMAP.md`.
+- Proposed Task 023: Graph UI Overhaul (Visual Analytics) in `docs/ideas/todo/023-graph-ui-overhaul.md`.
+- Planned multi-process overlay, dynamic scaling, and legends for the graph view.
+
+2026-03-21 16:00 - Completed Task 022: Tabbed Navigation (UI Management).
+- Implemented a robust `Tabs` widget to manage Dashboard, Processes, and Alerts views.
+- Updated `ViewMode` enum and `App` state to reflect the new navigation paradigm.
+- Added keybindings: `Tab`/`Shift+Tab` for cycling, `F1`-`F3` for direct access.
+- Implemented mouse support for clicking on tab headers.
+- Refactored Alerts from an overlay to a full-page view mode.
+- Updated layout and chunking logic in `ui.rs` to accommodate the tab bar.
+- Verified userspace compilation.
+
 2026-03-21 15:30 - Proposed Task 022: Tabbed Navigation (UI Management).
 - Created `docs/ideas/todo/022-tabbed-navigation.md`.
 - Planned implementation of a robust `Tabs` widget to manage multiple screens (Dashboard, Processes, Alerts).

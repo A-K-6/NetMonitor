@@ -340,10 +340,27 @@ async fn main() -> Result<(), anyhow::Error> {
                             KeyCode::Char('t') => {
                                 app.show_theme_dialog = !app.show_theme_dialog;
                             }
+                            KeyCode::F(1) => {
+                                app.view_mode = app::ViewMode::Dashboard;
+                            }
+                            KeyCode::F(2) => {
+                                app.view_mode = app::ViewMode::ProcessTable;
+                            }
+                            KeyCode::F(3) => {
+                                app.view_mode = app::ViewMode::Alerts;
+                            }
                             KeyCode::Tab => {
                                 app.view_mode = match app.view_mode {
-                                    app::ViewMode::ProcessTable => app::ViewMode::Dashboard,
                                     app::ViewMode::Dashboard => app::ViewMode::ProcessTable,
+                                    app::ViewMode::ProcessTable => app::ViewMode::Alerts,
+                                    app::ViewMode::Alerts => app::ViewMode::Dashboard,
+                                };
+                            }
+                            KeyCode::BackTab => {
+                                app.view_mode = match app.view_mode {
+                                    app::ViewMode::Dashboard => app::ViewMode::Alerts,
+                                    app::ViewMode::ProcessTable => app::ViewMode::Dashboard,
+                                    app::ViewMode::Alerts => app::ViewMode::ProcessTable,
                                 };
                             }
                             _ => {}
@@ -406,7 +423,18 @@ async fn main() -> Result<(), anyhow::Error> {
                                     }
                                 }
                             } else if !app.show_help && !app.show_alerts && !app.show_graph && !app.show_threshold_dialog && !app.show_detail {
-                                if app.view_mode == app::ViewMode::ProcessTable {
+                                // Check Tab click
+                                let tab_rect = Rect::new(0, 3, size.width, 3);
+                                if mouse.row >= tab_rect.y && mouse.row < tab_rect.y + tab_rect.height {
+                                    let tab_width = size.width / 3;
+                                    if mouse.column < tab_width {
+                                        app.view_mode = app::ViewMode::Dashboard;
+                                    } else if mouse.column < tab_width * 2 {
+                                        app.view_mode = app::ViewMode::ProcessTable;
+                                    } else {
+                                        app.view_mode = app::ViewMode::Alerts;
+                                    }
+                                } else if app.view_mode == app::ViewMode::ProcessTable {
                                     let table_rect = ui::get_table_rect(size, app.is_filtering);
                                     if mouse.column >= table_rect.x && mouse.column < table_rect.x + table_rect.width && mouse.row >= table_rect.y && mouse.row < table_rect.y + table_rect.height {
                                         if mouse.row == table_rect.y + 1 {
@@ -455,10 +483,12 @@ async fn main() -> Result<(), anyhow::Error> {
                                 if mouse.row >= footer_rect.y && mouse.row < footer_rect.y + footer_rect.height {
                                     let text = if app.historical_view_mode {
                                         "q/Esc/H: Exit Historical | s: Sort | /: Filter | Enter: Details | ?: Help".to_string()
-                                    } else if app.view_mode == app::ViewMode::Dashboard {
-                                        "Tab: Switch View | q: Quit | t: Theme | ?: Help".to_string()
                                     } else {
-                                        "Tab: Switch View | q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | A: Alerts | t: Theme | ?: Help".to_string()
+                                        match app.view_mode {
+                                            app::ViewMode::Dashboard => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
+                                            app::ViewMode::ProcessTable => "Tab/F1-F3: Switch | q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | t: Theme | ?: Help".to_string(),
+                                            app::ViewMode::Alerts => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
+                                        }
                                     };
                                     let start_x = footer_rect.x + (footer_rect.width.saturating_sub(text.len() as u16)) / 2;
                                     
@@ -485,65 +515,73 @@ async fn main() -> Result<(), anyhow::Error> {
                                         } else if mouse.column >= start_x + 51 && mouse.column < start_x + 58 {
                                             app.show_help = true;
                                         }
-                                    } else if app.view_mode == app::ViewMode::Dashboard {
-                                        if mouse.column >= start_x && mouse.column < start_x + 17 {
-                                            app.view_mode = app::ViewMode::ProcessTable;
-                                        } else if mouse.column >= start_x + 20 && mouse.column < start_x + 27 {
-                                            return Ok(());
-                                        } else if mouse.column >= start_x + 30 && mouse.column < start_x + 38 {
-                                            app.show_theme_dialog = !app.show_theme_dialog;
-                                        } else if mouse.column >= start_x + 41 && mouse.column < start_x + 48 {
-                                            app.show_help = true;
-                                        }
                                     } else {
-                                        if mouse.column >= start_x && mouse.column < start_x + 17 {
-                                            app.view_mode = app::ViewMode::Dashboard;
-                                        } else if mouse.column >= start_x + 20 && mouse.column < start_x + 27 {
-                                            return Ok(());
-                                        } else if mouse.column >= start_x + 30 && mouse.column < start_x + 37 {
-                                            if app.table_state.selected().is_some() {
-                                                app.show_kill_dialog = true;
-                                            }
-                                        } else if mouse.column >= start_x + 40 && mouse.column < start_x + 47 {
-                                            let next_col = match app.sort_column {
-                                                Column::Pid => Column::Name,
-                                                Column::Name => Column::Up,
-                                                Column::Up => Column::Down,
-                                                Column::Down => Column::Total,
-                                                Column::Total => Column::Pid,
-                                            };
-                                            app.toggle_sort(next_col);
-                                        } else if mouse.column >= start_x + 50 && mouse.column < start_x + 59 {
-                                            app.is_filtering = true;
-                                            app.filter_text.clear();
-                                        } else if mouse.column >= start_x + 62 && mouse.column < start_x + 76 {
-                                            if app.table_state.selected().is_some() {
-                                                app.show_detail = true;
-                                            }
-                                        } else if mouse.column >= start_x + 79 && mouse.column < start_x + 87 {
-                                            if let Some(i) = app.table_state.selected() {
-                                                if let Some(row) = app.process_data.get(i) {
-                                                    app.show_graph = true;
-                                                    if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
-                                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                                        app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
-                                                        app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
-                                                    }
+                                        match app.view_mode {
+                                            app::ViewMode::Dashboard | app::ViewMode::Alerts => {
+                                                if mouse.column >= start_x && mouse.column < start_x + 15 {
+                                                    // Toggle View via Tab logic (or just cycle)
+                                                    app.view_mode = match app.view_mode {
+                                                        app::ViewMode::Dashboard => app::ViewMode::ProcessTable,
+                                                        app::ViewMode::Alerts => app::ViewMode::Dashboard,
+                                                        _ => app::ViewMode::Dashboard,
+                                                    };
+                                                } else if mouse.column >= start_x + 18 && mouse.column < start_x + 25 {
+                                                    return Ok(());
+                                                } else if mouse.column >= start_x + 28 && mouse.column < start_x + 36 {
+                                                    app.show_theme_dialog = !app.show_theme_dialog;
+                                                } else if mouse.column >= start_x + 39 && mouse.column < start_x + 46 {
+                                                    app.show_help = true;
                                                 }
                                             }
-                                        } else if mouse.column >= start_x + 90 && mouse.column < start_x + 100 {
-                                            app.show_historical_dialog = true;
-                                        } else if mouse.column >= start_x + 103 && mouse.column < start_x + 111 {
-                                            if app.table_state.selected().is_some() {
-                                                app.show_threshold_dialog = true;
-                                                app.threshold_input.clear();
+                                            app::ViewMode::ProcessTable => {
+                                                if mouse.column >= start_x && mouse.column < start_x + 15 {
+                                                    app.view_mode = app::ViewMode::Alerts;
+                                                } else if mouse.column >= start_x + 18 && mouse.column < start_x + 25 {
+                                                    return Ok(());
+                                                } else if mouse.column >= start_x + 28 && mouse.column < start_x + 35 {
+                                                    if app.table_state.selected().is_some() {
+                                                        app.show_kill_dialog = true;
+                                                    }
+                                                } else if mouse.column >= start_x + 38 && mouse.column < start_x + 45 {
+                                                    let next_col = match app.sort_column {
+                                                        Column::Pid => Column::Name,
+                                                        Column::Name => Column::Up,
+                                                        Column::Up => Column::Down,
+                                                        Column::Down => Column::Total,
+                                                        Column::Total => Column::Pid,
+                                                    };
+                                                    app.toggle_sort(next_col);
+                                                } else if mouse.column >= start_x + 48 && mouse.column < start_x + 57 {
+                                                    app.is_filtering = true;
+                                                    app.filter_text.clear();
+                                                } else if mouse.column >= start_x + 60 && mouse.column < start_x + 74 {
+                                                    if app.table_state.selected().is_some() {
+                                                        app.show_detail = true;
+                                                    }
+                                                } else if mouse.column >= start_x + 77 && mouse.column < start_x + 85 {
+                                                    if let Some(i) = app.table_state.selected() {
+                                                        if let Some(row) = app.process_data.get(i) {
+                                                            app.show_graph = true;
+                                                            if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
+                                                                let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                                                app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
+                                                                app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                                            }
+                                                        }
+                                                    }
+                                                } else if mouse.column >= start_x + 88 && mouse.column < start_x + 98 {
+                                                    app.show_historical_dialog = true;
+                                                } else if mouse.column >= start_x + 101 && mouse.column < start_x + 109 {
+                                                    if app.table_state.selected().is_some() {
+                                                        app.show_threshold_dialog = true;
+                                                        app.threshold_input.clear();
+                                                    }
+                                                } else if mouse.column >= start_x + 112 && mouse.column < start_x + 120 {
+                                                    app.show_theme_dialog = !app.show_theme_dialog;
+                                                } else if mouse.column >= start_x + 123 && mouse.column < start_x + 130 {
+                                                    app.show_help = true;
+                                                }
                                             }
-                                        } else if mouse.column >= start_x + 114 && mouse.column < start_x + 123 {
-                                            app.show_alerts = !app.show_alerts;
-                                        } else if mouse.column >= start_x + 126 && mouse.column < start_x + 134 {
-                                            app.show_theme_dialog = !app.show_theme_dialog;
-                                        } else if mouse.column >= start_x + 137 && mouse.column < start_x + 144 {
-                                            app.show_help = true;
                                         }
                                     }
                                 }
