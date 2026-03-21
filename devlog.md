@@ -1,3 +1,16 @@
+2026-03-21 11:00 - Proposed Task 018: Mouse Support (Click & Scroll).
+- Created `docs/ideas/todo/018-mouse-support.md`.
+- Planned implementation of mouse event capture and basic scrolling for the process table.
+- Planned research into coordinate mapping for click-to-select.
+
+2026-03-21 10:30 - Completed Task 017: Custom Themes & Theme Selector.
+- Implemented `Theme` engine in `netmonitor/src/theme.rs` with presets: Default, Dracula, Solarized, Monokai, and High Contrast.
+- Decoupled hardcoded colors from `netmonitor/src/ui.rs` by referencing `app.current_theme`.
+- Added `current_theme` and `theme_state` to `App` struct in `netmonitor/src/app.rs`.
+- Implemented interactive Theme Selector dialog (hotkey `t`) with Up/Down navigation and Enter to apply.
+- Updated `ROADMAP.md` and `TECHNICAL_SPEC.md` to reflect theme engine integration.
+- Verified changes with `cargo check`.
+
 2026-03-20 14:10 - Proposed Task 017: Custom Themes & Theme Selector.
 - Created `docs/ideas/todo/017-custom-themes.md`.
 - Planned implementation of a theme engine with preset color schemes (Default, Dracula, Solarized).

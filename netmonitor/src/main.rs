@@ -2,6 +2,7 @@ mod process;
 mod app;
 mod tui;
 mod ui;
+mod theme;
 mod geoip;
 mod protocol;
 mod dns;
@@ -160,6 +161,19 @@ async fn main() -> Result<(), anyhow::Error> {
                         }
                         _ => {}
                     }
+                } else if app.show_theme_dialog {
+                    match key.code {
+                        KeyCode::Up => app.previous_theme(),
+                        KeyCode::Down => app.next_theme(),
+                        KeyCode::Enter => {
+                            app.apply_theme();
+                            app.show_theme_dialog = false;
+                        }
+                        KeyCode::Esc | KeyCode::Char('t') => {
+                            app.show_theme_dialog = false;
+                        }
+                        _ => {}
+                    }
                 } else if app.is_filtering {
                     match key.code {
                         KeyCode::Char(c) => {
@@ -274,6 +288,9 @@ async fn main() -> Result<(), anyhow::Error> {
                         }
                         KeyCode::Char('A') => {
                             app.show_alerts = !app.show_alerts;
+                        }
+                        KeyCode::Char('t') => {
+                            app.show_theme_dialog = !app.show_theme_dialog;
                         }
                         _ => {}
                     }

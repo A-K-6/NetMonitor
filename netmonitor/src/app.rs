@@ -1,5 +1,6 @@
-use ratatui::widgets::TableState;
+use ratatui::widgets::{TableState, ListState};
 use std::collections::{HashMap, VecDeque};
+use crate::theme::{Theme, ThemeType};
 
 pub const MAX_HISTORY: usize = 100;
 
@@ -86,6 +87,10 @@ pub struct App {
     pub show_help: bool,
     pub show_threshold_dialog: bool,
     pub show_alerts: bool,
+    pub show_theme_dialog: bool,
+    pub theme_state: ListState,
+    pub current_theme: Theme,
+    pub current_theme_type: ThemeType,
     pub threshold_input: String,
     pub thresholds: HashMap<u32, u64>, // PID -> KB/s
     pub alerts: VecDeque<Alert>,
@@ -103,6 +108,9 @@ pub struct App {
 
 impl App {
     pub fn new(historical_data: HashMap<u32, ProcessRow>) -> Self {
+        let mut theme_state = ListState::default();
+        theme_state.select(Some(0));
+
         Self {
             process_data: Vec::new(),
             total_upload: 0,
@@ -117,6 +125,10 @@ impl App {
             show_help: false,
             show_threshold_dialog: false,
             show_alerts: false,
+            show_theme_dialog: false,
+            theme_state,
+            current_theme: Theme::from_type(ThemeType::Default),
+            current_theme_type: ThemeType::Default,
             threshold_input: String::new(),
             thresholds: HashMap::new(),
             alerts: VecDeque::with_capacity(MAX_HISTORY),
@@ -159,6 +171,46 @@ impl App {
             None => 0,
         };
         self.table_state.select(Some(i));
+    }
+
+    pub fn next_theme(&mut self) {
+        let i = match self.theme_state.selected() {
+            Some(i) => {
+                let themes = ThemeType::all();
+                if i >= themes.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.theme_state.select(Some(i));
+    }
+
+    pub fn previous_theme(&mut self) {
+        let i = match self.theme_state.selected() {
+            Some(i) => {
+                let themes = ThemeType::all();
+                if i == 0 {
+                    themes.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.theme_state.select(Some(i));
+    }
+
+    pub fn apply_theme(&mut self) {
+        if let Some(i) = self.theme_state.selected() {
+            let themes = ThemeType::all();
+            if let Some(t_type) = themes.get(i) {
+                self.current_theme_type = *t_type;
+                self.current_theme = Theme::from_type(*t_type);
+            }
+        }
     }
 
     pub fn toggle_sort(&mut self, col: Column) {
