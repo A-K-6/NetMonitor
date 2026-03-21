@@ -1,4 +1,5 @@
-use crate::app::{App, Column};
+use crate::app::{App, Column, HistoricalRange};
+use chrono::Utc;
 use crate::theme::ThemeType;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect, Alignment},
@@ -36,10 +37,19 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let up_kbs = app.total_upload as f64 / 1024.0;
     let down_kbs = app.total_download as f64 / 1024.0;
     
-    let mut header_text = format!(
-        "UP: {:.1} KB/s | DOWN: {:.1} KB/s",
-        up_kbs, down_kbs
-    );
+    let mut header_text = if app.historical_view_mode {
+        let start = app.historical_start_time.unwrap_or(Utc::now());
+        let end = app.historical_end_time.unwrap_or(Utc::now());
+        format!(
+            "HISTORICAL: {} - {} | UP: {:.1} KB | DOWN: {:.1} KB",
+            start.format("%H:%M:%S"), end.format("%H:%M:%S"), up_kbs, down_kbs
+        )
+    } else {
+        format!(
+            "UP: {:.1} KB/s | DOWN: {:.1} KB/s",
+            up_kbs, down_kbs
+        )
+    };
 
     if !app.alerts.is_empty() {
         if let Some(last) = app.alerts.back() {
@@ -105,8 +115,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .add_modifier(Modifier::BOLD);
     let normal_style = Style::default().fg(theme.row_fg);
 
-    let header_cells = ["PID", "NAME", "UP (KB/s)", "DOWN (KB/s)", "TOTAL (KB)"]
-        .iter()
+    let up_label = if app.historical_view_mode { "UP (KB)" } else { "UP (KB/s)" };
+    let down_label = if app.historical_view_mode { "DOWN (KB)" } else { "DOWN (KB/s)" };
+
+    let header_cells = ["PID", "NAME", up_label, down_label, "TOTAL (KB)"]
+        .into_iter()
         .enumerate()
         .map(|(i, h)| {
             let col = match i {
@@ -162,7 +175,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .header(table_header)
         .block(Block::default()
             .borders(Borders::ALL)
-            .title("Processes")
+            .title(if app.historical_view_mode { "Processes (Historical)" } else { "Processes" })
             .border_style(Style::default().fg(theme.border_fg)))
         .highlight_style(selected_style)
         .highlight_symbol(">> ");
@@ -174,14 +187,18 @@ pub fn render(f: &mut Frame, app: &mut App) {
         "Type to filter | Enter/Esc: Finish".to_string()
     } else if app.show_graph {
         format!("Tab: Cycle Range ({}) | g/Esc: Close", app.graph_time_range.label())
+    } else if app.show_historical_dialog {
+        "Up/Down: Cycle | Enter: Select | Esc/H: Close".to_string()
     } else if app.show_threshold_dialog {
         "Enter: Set Threshold (KB/s) | Esc: Cancel".to_string()
     } else if app.show_theme_dialog {
         "Up/Down: Cycle | Enter: Apply | Esc/t: Close".to_string()
     } else if let Some(msg) = &app.status_message {
         format!("STATUS: {} | Press any key to clear", msg)
+    } else if app.historical_view_mode {
+        "q/Esc/H: Exit Historical | s: Sort | /: Filter | Enter: Details | ?: Help".to_string()
     } else {
-        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | a: Alert | A: Alerts | t: Theme | ?: Help".to_string()
+        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | A: Alerts | t: Theme | ?: Help".to_string()
     };
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(theme.status_fg))
@@ -246,6 +263,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
     // Theme Dialog
     if app.show_theme_dialog {
         render_theme_dialog(f, app, size);
+    }
+
+    // Historical Range Dialog
+    if app.show_historical_dialog {
+        render_historical_dialog(f, app, size);
     }
 }
 
@@ -571,4 +593,28 @@ fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
             ]));
 
     f.render_widget(chart, area);
+}
+
+fn render_historical_dialog(f: &mut Frame, app: &mut App, size: Rect) {
+    let area = centered_rect(30, 40, size);
+    f.render_widget(Clear, area);
+
+    let theme = &app.current_theme;
+    let ranges = HistoricalRange::all();
+    let items: Vec<ListItem> = ranges.iter().map(|r| {
+        ListItem::new(r.label())
+    }).collect();
+
+    let list = List::new(items)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(" Select Time Frame ")
+            .border_style(Style::default().fg(theme.header_fg)))
+        .highlight_style(Style::default()
+            .fg(theme.highlight_fg)
+            .bg(theme.highlight_bg)
+            .add_modifier(Modifier::BOLD))
+        .highlight_symbol(">> ");
+
+    f.render_stateful_widget(list, area, &mut app.historical_range_state);
 }

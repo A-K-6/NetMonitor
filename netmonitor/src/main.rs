@@ -8,7 +8,7 @@ mod protocol;
 mod dns;
 mod db;
 
-use app::{App, Column, ProcessRow, TimeRange};
+use app::{App, Column, ProcessRow, TimeRange, HistoricalRange};
 use aya::maps::HashMap;
 use aya::programs::KProbe;
 use aya::Ebpf;
@@ -17,7 +17,7 @@ use caps::{CapSet, Capability, has_cap};
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEventKind, MouseButton};
 use netmonitor_common::{TrafficStats, ConnectionKey};
 use process::ProcessResolver;
-use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
+use ratatui::layout::{Direction, Layout, Margin, Rect};
 use std::env;
 use std::time::{Duration, Instant};
 use log::{error, info};
@@ -132,6 +132,39 @@ async fn main() -> Result<(), anyhow::Error> {
                             }
                             _ => {}
                         }
+                    } else if app.show_historical_dialog {
+                        match key.code {
+                            KeyCode::Up => app.previous_historical_range(),
+                            KeyCode::Down => app.next_historical_range(),
+                            KeyCode::Enter => {
+                                if let Some(i) = app.historical_range_state.selected() {
+                                    let ranges = HistoricalRange::all();
+                                    if let Some(range) = ranges.get(i) {
+                                        let end = Utc::now();
+                                        let start = end - chrono::Duration::seconds(range.to_seconds());
+                                        
+                                        match db.get_aggregated_stats(start, end) {
+                                            Ok(stats) => {
+                                                app.historical_data = stats.into_values().collect();
+                                                app.historical_view_mode = true;
+                                                app.historical_start_time = Some(start);
+                                                app.historical_end_time = Some(end);
+                                                app.status_message = Some(format!("Historical View: {}", range.label()));
+                                                app.sort_data();
+                                            }
+                                            Err(e) => {
+                                                app.status_message = Some(format!("Error fetching stats: {}", e));
+                                            }
+                                        }
+                                    }
+                                }
+                                app.show_historical_dialog = false;
+                            }
+                            KeyCode::Esc | KeyCode::Char('H') => {
+                                app.show_historical_dialog = false;
+                            }
+                            _ => {}
+                        }
                     } else if app.show_threshold_dialog {
                         match key.code {
                             KeyCode::Char(c) if c.is_digit(10) => {
@@ -237,10 +270,23 @@ async fn main() -> Result<(), anyhow::Error> {
                     } else {
                         match key.code {
                             KeyCode::Char('q') | KeyCode::Esc => {
-                                app.is_running = false;
+                                if app.historical_view_mode {
+                                    app.historical_view_mode = false;
+                                    app.status_message = Some("Exited Historical View".to_string());
+                                } else {
+                                    app.is_running = false;
+                                }
                             }
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 app.is_running = false;
+                            }
+                            KeyCode::Char('H') => {
+                                if app.historical_view_mode {
+                                    app.historical_view_mode = false;
+                                    app.status_message = Some("Exited Historical View".to_string());
+                                } else {
+                                    app.show_historical_dialog = true;
+                                }
                             }
                             KeyCode::Char('/') | KeyCode::Char('f') => {
                                 app.is_filtering = true;
@@ -396,56 +442,87 @@ async fn main() -> Result<(), anyhow::Error> {
                             }
                             
                             // Check Footer click (only if no dialog is open)
-                            if !app.show_help && !app.show_alerts && !app.show_kill_dialog && !app.show_graph && !app.show_threshold_dialog && !app.show_detail && !app.show_theme_dialog {
+                            if !app.show_help && !app.show_alerts && !app.show_kill_dialog && !app.show_graph && !app.show_threshold_dialog && !app.show_detail && !app.show_theme_dialog && !app.show_historical_dialog {
                                 let footer_rect = ui::get_footer_rect(size);
                                 if mouse.row >= footer_rect.y && mouse.row < footer_rect.y + footer_rect.height {
-                                    let text = "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | a: Alert | A: Alerts | t: Theme | ?: Help";
+                                    let text = if app.historical_view_mode {
+                                        "q/Esc/H: Exit Historical | s: Sort | /: Filter | Enter: Details | ?: Help"
+                                    } else {
+                                        "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | A: Alerts | t: Theme | ?: Help"
+                                    };
                                     let start_x = footer_rect.x + (footer_rect.width.saturating_sub(text.len() as u16)) / 2;
                                     
-                                    if mouse.column >= start_x && mouse.column < start_x + 7 {
-                                        return Ok(());
-                                    } else if mouse.column >= start_x + 10 && mouse.column < start_x + 17 {
-                                        if app.table_state.selected().is_some() {
-                                            app.show_kill_dialog = true;
+                                    if app.historical_view_mode {
+                                        if mouse.column >= start_x && mouse.column < start_x + 9 {
+                                            app.historical_view_mode = false;
+                                            app.status_message = Some("Exited Historical View".to_string());
+                                        } else if mouse.column >= start_x + 12 && mouse.column < start_x + 19 {
+                                            let next_col = match app.sort_column {
+                                                Column::Pid => Column::Name,
+                                                Column::Name => Column::Up,
+                                                Column::Up => Column::Down,
+                                                Column::Down => Column::Total,
+                                                Column::Total => Column::Pid,
+                                            };
+                                            app.toggle_sort(next_col);
+                                        } else if mouse.column >= start_x + 22 && mouse.column < start_x + 31 {
+                                            app.is_filtering = true;
+                                            app.filter_text.clear();
+                                        } else if mouse.column >= start_x + 34 && mouse.column < start_x + 48 {
+                                            if app.table_state.selected().is_some() {
+                                                app.show_detail = true;
+                                            }
+                                        } else if mouse.column >= start_x + 51 && mouse.column < start_x + 58 {
+                                            app.show_help = true;
                                         }
-                                    } else if mouse.column >= start_x + 20 && mouse.column < start_x + 27 {
-                                        let next_col = match app.sort_column {
-                                            Column::Pid => Column::Name,
-                                            Column::Name => Column::Up,
-                                            Column::Up => Column::Down,
-                                            Column::Down => Column::Total,
-                                            Column::Total => Column::Pid,
-                                        };
-                                        app.toggle_sort(next_col);
-                                    } else if mouse.column >= start_x + 30 && mouse.column < start_x + 39 {
-                                        app.is_filtering = true;
-                                        app.filter_text.clear();
-                                    } else if mouse.column >= start_x + 42 && mouse.column < start_x + 56 {
-                                        if app.table_state.selected().is_some() {
-                                            app.show_detail = true;
-                                        }
-                                    } else if mouse.column >= start_x + 59 && mouse.column < start_x + 67 {
-                                        if let Some(i) = app.table_state.selected() {
-                                            if let Some(row) = app.process_data.get(i) {
-                                                app.show_graph = true;
-                                                if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
-                                                    let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                                    app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
-                                                    app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                    } else {
+                                        if mouse.column >= start_x && mouse.column < start_x + 7 {
+                                            return Ok(());
+                                        } else if mouse.column >= start_x + 10 && mouse.column < start_x + 17 {
+                                            if app.table_state.selected().is_some() {
+                                                app.show_kill_dialog = true;
+                                            }
+                                        } else if mouse.column >= start_x + 20 && mouse.column < start_x + 27 {
+                                            let next_col = match app.sort_column {
+                                                Column::Pid => Column::Name,
+                                                Column::Name => Column::Up,
+                                                Column::Up => Column::Down,
+                                                Column::Down => Column::Total,
+                                                Column::Total => Column::Pid,
+                                            };
+                                            app.toggle_sort(next_col);
+                                        } else if mouse.column >= start_x + 30 && mouse.column < start_x + 39 {
+                                            app.is_filtering = true;
+                                            app.filter_text.clear();
+                                        } else if mouse.column >= start_x + 42 && mouse.column < start_x + 56 {
+                                            if app.table_state.selected().is_some() {
+                                                app.show_detail = true;
+                                            }
+                                        } else if mouse.column >= start_x + 59 && mouse.column < start_x + 67 {
+                                            if let Some(i) = app.table_state.selected() {
+                                                if let Some(row) = app.process_data.get(i) {
+                                                    app.show_graph = true;
+                                                    if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
+                                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                                        app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
+                                                        app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                                    }
                                                 }
                                             }
+                                        } else if mouse.column >= start_x + 70 && mouse.column < start_x + 80 {
+                                            app.show_historical_dialog = true;
+                                        } else if mouse.column >= start_x + 83 && mouse.column < start_x + 91 {
+                                            if app.table_state.selected().is_some() {
+                                                app.show_threshold_dialog = true;
+                                                app.threshold_input.clear();
+                                            }
+                                        } else if mouse.column >= start_x + 94 && mouse.column < start_x + 103 {
+                                            app.show_alerts = !app.show_alerts;
+                                        } else if mouse.column >= start_x + 106 && mouse.column < start_x + 114 {
+                                            app.show_theme_dialog = !app.show_theme_dialog;
+                                        } else if mouse.column >= start_x + 117 && mouse.column < start_x + 124 {
+                                            app.show_help = true;
                                         }
-                                    } else if mouse.column >= start_x + 70 && mouse.column < start_x + 78 {
-                                        if app.table_state.selected().is_some() {
-                                            app.show_threshold_dialog = true;
-                                            app.threshold_input.clear();
-                                        }
-                                    } else if mouse.column >= start_x + 81 && mouse.column < start_x + 90 {
-                                        app.show_alerts = !app.show_alerts;
-                                    } else if mouse.column >= start_x + 93 && mouse.column < start_x + 101 {
-                                        app.show_theme_dialog = !app.show_theme_dialog;
-                                    } else if mouse.column >= start_x + 104 && mouse.column < start_x + 111 {
-                                        app.show_help = true;
                                     }
                                 }
                             }
@@ -536,66 +613,83 @@ async fn main() -> Result<(), anyhow::Error> {
             }
 
             // Update connections
-            app.connections.clear();
-            for result in connections_map.iter() {
-                if let Ok((key, stats)) = result {
-                    use std::net::{Ipv4Addr, IpAddr};
-                    let dst_addr = Ipv4Addr::from(u32::from_be(key.dst_ip));
-                    let src_ip = Ipv4Addr::from(u32::from_be(key.src_ip)).to_string();
-                    let dst_ip_addr = IpAddr::V4(dst_addr);
-                    let dst_ip = dst_addr.to_string();
-                    
-                    let (country, isp) = geoip::RESOLVER.resolve(dst_ip_addr);
-                    let service = protocol::RESOLVER.resolve(key.proto, key.dst_port);
-                    
-                    // Get cached hostname or trigger resolution
-                    let hostname = match dns::RESOLVER.get_cached(dst_ip_addr) {
-                        Some(h) => h,
-                        None => {
-                            // Spawn background resolution if not in cache
-                            tokio::spawn(async move {
-                                dns::RESOLVER.resolve(dst_ip_addr).await;
-                            });
-                            None
-                        }
-                    };
+            if !app.historical_view_mode {
+                app.connections.clear();
+                for result in connections_map.iter() {
+                    if let Ok((key, stats)) = result {
+                        use std::net::{Ipv4Addr, IpAddr};
+                        let dst_addr = Ipv4Addr::from(u32::from_be(key.dst_ip));
+                        let src_ip = Ipv4Addr::from(u32::from_be(key.src_ip)).to_string();
+                        let dst_ip_addr = IpAddr::V4(dst_addr);
+                        let dst_ip = dst_addr.to_string();
+                        
+                        let (country, isp) = geoip::RESOLVER.resolve(dst_ip_addr);
+                        let service = protocol::RESOLVER.resolve(key.proto, key.dst_port);
+                        
+                        // Get cached hostname or trigger resolution
+                        let hostname = match dns::RESOLVER.get_cached(dst_ip_addr) {
+                            Some(h) => h,
+                            None => {
+                                // Spawn background resolution if not in cache
+                                tokio::spawn(async move {
+                                    dns::RESOLVER.resolve(dst_ip_addr).await;
+                                });
+                                None
+                            }
+                        };
 
-                    let conn_info = app::ConnectionInfo {
-                        proto: key.proto,
-                        src_ip,
-                        src_port: key.src_port,
-                        dst_ip,
-                        dst_port: key.dst_port,
-                        up_bytes: stats.bytes_sent,
-                        down_bytes: stats.bytes_recv,
-                        country,
-                        isp,
-                        hostname,
-                        service,
-                    };
-                    app.connections.entry(key.pid).or_default().push(conn_info);
+                        let conn_info = app::ConnectionInfo {
+                            proto: key.proto,
+                            src_ip,
+                            src_port: key.src_port,
+                            dst_ip,
+                            dst_port: key.dst_port,
+                            up_bytes: stats.bytes_sent,
+                            down_bytes: stats.bytes_recv,
+                            country,
+                            isp,
+                            hostname,
+                            service,
+                        };
+                        app.connections.entry(key.pid).or_default().push(conn_info);
+                    }
                 }
             }
 
-            // 2. Clear current process_data and populate from history with filter
+            // 2. Clear current process_data and populate from history/historical_data with filter
             app.process_data.clear();
             let filter_lower = app.filter_text.to_lowercase();
 
-            for row in app.process_history.values() {
-                if app.filter_text.is_empty() || row.name.to_lowercase().contains(&filter_lower) {
-                    app.process_data.push(row.clone());
+            if app.historical_view_mode {
+                for row in &app.historical_data {
+                    if app.filter_text.is_empty() || row.name.to_lowercase().contains(&filter_lower) {
+                        app.process_data.push(row.clone());
+                    }
+                }
+            } else {
+                for row in app.process_history.values() {
+                    if app.filter_text.is_empty() || row.name.to_lowercase().contains(&filter_lower) {
+                        app.process_data.push(row.clone());
+                    }
                 }
             }
 
-            app.total_upload = current_total_up;
-            app.total_download = current_total_down;
+            if !app.historical_view_mode {
+                app.total_upload = current_total_up;
+                app.total_download = current_total_down;
 
-            // Update global history
-            app.history_up.push_back(current_total_up);
-            app.history_down.push_back(current_total_down);
-            if app.history_up.len() > app::MAX_HISTORY {
-                app.history_up.pop_front();
-                app.history_down.pop_front();
+                // Update global history
+                app.history_up.push_back(current_total_up);
+                app.history_down.push_back(current_total_down);
+                if app.history_up.len() > app::MAX_HISTORY {
+                    app.history_up.pop_front();
+                    app.history_down.pop_front();
+                }
+            } else {
+                // In historical mode, total_upload/download for the header
+                // will reflect the sum of the filtered historical data
+                app.total_upload = app.process_data.iter().map(|p| p.up_bytes).sum();
+                app.total_download = app.process_data.iter().map(|p| p.down_bytes).sum();
             }
 
             app.sort_data();

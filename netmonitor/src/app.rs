@@ -55,6 +55,39 @@ pub enum TimeRange {
     TwentyFourHours,
 }
 
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum HistoricalRange {
+    LastHour,
+    Last4Hours,
+    Last24Hours,
+}
+
+impl HistoricalRange {
+    pub fn all() -> Vec<Self> {
+        vec![
+            HistoricalRange::LastHour,
+            HistoricalRange::Last4Hours,
+            HistoricalRange::Last24Hours,
+        ]
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            HistoricalRange::LastHour => "Last 1 Hour",
+            HistoricalRange::Last4Hours => "Last 4 Hours",
+            HistoricalRange::Last24Hours => "Last 24 Hours",
+        }
+    }
+
+    pub fn to_seconds(&self) -> i64 {
+        match self {
+            HistoricalRange::LastHour => 3600,
+            HistoricalRange::Last4Hours => 14400,
+            HistoricalRange::Last24Hours => 86400,
+        }
+    }
+}
+
 impl TimeRange {
     pub fn to_seconds(&self) -> i64 {
         match self {
@@ -104,12 +137,21 @@ pub struct App {
     pub history_up: VecDeque<u64>,
     pub history_down: VecDeque<u64>,
     pub connections: HashMap<u32, Vec<ConnectionInfo>>, // PID -> List of connections
+    pub historical_view_mode: bool,
+    pub historical_start_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub historical_end_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub show_historical_dialog: bool,
+    pub historical_range_state: ListState,
+    pub historical_data: Vec<ProcessRow>,
 }
 
 impl App {
     pub fn new(historical_data: HashMap<u32, ProcessRow>) -> Self {
         let mut theme_state = ListState::default();
         theme_state.select(Some(0));
+
+        let mut historical_range_state = ListState::default();
+        historical_range_state.select(Some(0));
 
         Self {
             process_data: Vec::new(),
@@ -142,6 +184,12 @@ impl App {
             history_up: VecDeque::with_capacity(MAX_HISTORY),
             history_down: VecDeque::with_capacity(MAX_HISTORY),
             connections: HashMap::new(),
+            historical_view_mode: false,
+            historical_start_time: None,
+            historical_end_time: None,
+            show_historical_dialog: false,
+            historical_range_state,
+            historical_data: Vec::new(),
         }
     }
 
@@ -213,6 +261,36 @@ impl App {
         }
     }
 
+    pub fn next_historical_range(&mut self) {
+        let i = match self.historical_range_state.selected() {
+            Some(i) => {
+                let ranges = HistoricalRange::all();
+                if i >= ranges.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.historical_range_state.select(Some(i));
+    }
+
+    pub fn previous_historical_range(&mut self) {
+        let i = match self.historical_range_state.selected() {
+            Some(i) => {
+                let ranges = HistoricalRange::all();
+                if i == 0 {
+                    ranges.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.historical_range_state.select(Some(i));
+    }
+
     pub fn toggle_sort(&mut self, col: Column) {
         if self.sort_column == col {
             self.sort_desc = !self.sort_desc;
@@ -224,7 +302,13 @@ impl App {
     }
 
     pub fn sort_data(&mut self) {
-        self.process_data.sort_by(|a, b| {
+        let data = if self.historical_view_mode {
+            &mut self.historical_data
+        } else {
+            &mut self.process_data
+        };
+
+        data.sort_by(|a, b| {
             let ordering = match self.sort_column {
                 Column::Pid => a.pid.cmp(&b.pid),
                 Column::Name => a.name.cmp(&b.name),

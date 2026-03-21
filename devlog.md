@@ -1,3 +1,18 @@
+2026-03-21 14:30 - Proposed Task 021: Global Dashboard (Overall View).
+- Created `docs/ideas/todo/021-global-dashboard.md`.
+- Planned implementation of a high-level summary view (Dashboard) for system-wide network health.
+- Planned features: Big-number throughput, Protocol distribution (TCP/UDP), Top processes, and Geo-IP summary.
+- Planned navigation via `Tab` key to switch between Dashboard and Process Monitor.
+
+2026-03-21 14:15 - Completed Task 020: Time-Travel/Historical Analysis.
+- Implemented `get_aggregated_stats` in `DbManager` to fetch bandwidth data for specific time windows.
+- Added indexes to `traffic_log` table for performant historical queries.
+- Added `HistoricalRange` selection dialog (accessible via 'H') to select Last 1h, 4h, or 24h.
+- Implemented `historical_view_mode` in `App` to toggle between live and historical process data.
+- Updated TUI to reflect historical state in the header and process table.
+- Added unit tests for historical data aggregation in `db.rs`.
+- Verified compilation and test pass.
+
 2026-03-21 13:25 - Updated ROADMAP.md and Proposed Task 020.
 - Updated Phase 3 of the roadmap to mark Task 019 as completed.
 - Added Task 020: Time-Travel/Historical Analysis to the roadmap.
