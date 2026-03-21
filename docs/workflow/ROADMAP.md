@@ -36,7 +36,10 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Help Overlay:** A dedicated `?` screen explaining all keybindings and features.
 - [ ] **TUI Refinement:**
     - [x] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
-    - [ ] **Mouse Support:** Basic click-to-select and scroll support for the process table.
+    - [x] **Mouse Support:** Basic click-to-select and scroll support for the process table.
+    - [ ] **Extended Mouse Support:** Clickable table headers for sorting and interactive dialog elements.
+    - [ ] **Graph UI Overhaul:** Enhanced visualization with better axes, legends, and multi-process overlay support.
+    - [ ] **Adaptive Theming:** Support for terminal default colors (transparency/ANSI) and system-wide theme detection.
 ## Phase 4: Stability & Documentation
 *Goal: Professional-grade packaging and rigorous documentation.*
 - [ ] **Performance Audit:** Verify CPU usage remains <1% under heavy network load.

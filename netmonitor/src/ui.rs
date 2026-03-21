@@ -265,6 +265,27 @@ pub fn render(f: &mut Frame, app: &mut App) {
     }
 }
 
+pub fn get_table_rect(size: Rect, is_filtering: bool) -> Rect {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Header
+            Constraint::Min(5),    // Main
+            Constraint::Length(3), // Footer
+        ])
+        .split(size);
+
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            if is_filtering { Constraint::Length(3) } else { Constraint::Length(0) },
+            Constraint::Min(0),
+        ])
+        .split(chunks[1]);
+    
+    main_chunks[1]
+}
+
 fn render_theme_dialog(f: &mut Frame, app: &mut App, size: Rect) {
     let area = centered_rect(30, 40, size);
     f.render_widget(Clear, area);
@@ -516,7 +537,7 @@ fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
     f.render_widget(chart, area);
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
