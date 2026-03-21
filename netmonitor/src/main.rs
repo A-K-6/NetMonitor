@@ -17,6 +17,7 @@ use caps::{CapSet, Capability, has_cap};
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEventKind, MouseButton};
 use netmonitor_common::{TrafficStats, ConnectionKey};
 use process::ProcessResolver;
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use std::env;
 use std::time::{Duration, Instant};
 use log::{error, info};
@@ -315,8 +316,9 @@ async fn main() -> Result<(), anyhow::Error> {
                         }
                         MouseEventKind::Down(MouseButton::Left) => {
                             app.status_message = None;
+                            let size = terminal.size().unwrap_or_default();
+                            
                             if app.show_theme_dialog {
-                                let size = terminal.size().unwrap_or_default();
                                 let area = ui::centered_rect(30, 40, size);
                                 if mouse.column >= area.x && mouse.column < area.x + area.width && mouse.row >= area.y && mouse.row < area.y + area.height {
                                     let content_y = area.y + 1;
@@ -327,17 +329,123 @@ async fn main() -> Result<(), anyhow::Error> {
                                         }
                                     }
                                 }
-                            } else if !app.show_help && !app.show_alerts && !app.show_kill_dialog && !app.show_graph && !app.show_threshold_dialog && !app.show_detail {
-                                let size = terminal.size().unwrap_or_default();
+                            } else if app.show_kill_dialog {
+                                let area = ui::centered_rect(60, 20, size);
+                                if mouse.column >= area.x && mouse.column < area.x + area.width && mouse.row >= area.y && mouse.row < area.y + area.height {
+                                    if mouse.row == area.y + 4 {
+                                        let text = "(y)es / (n)o";
+                                        let start_x = area.x + (area.width.saturating_sub(text.len() as u16)) / 2;
+                                        if mouse.column >= start_x && mouse.column < start_x + 5 {
+                                            if let Some(i) = app.table_state.selected() {
+                                                if let Some(row) = app.process_data.get(i) {
+                                                    unsafe {
+                                                        if libc::kill(row.pid as libc::pid_t, libc::SIGKILL) == 0 {
+                                                            app.status_message = Some(format!("Killed PID {}", row.pid));
+                                                        } else {
+                                                            app.status_message = Some(format!("Failed to kill PID {}", row.pid));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            app.show_kill_dialog = false;
+                                        } else if mouse.column >= start_x + 8 && mouse.column < start_x + 12 {
+                                            app.show_kill_dialog = false;
+                                        }
+                                    }
+                                }
+                            } else if !app.show_help && !app.show_alerts && !app.show_graph && !app.show_threshold_dialog && !app.show_detail {
                                 let table_rect = ui::get_table_rect(size, app.is_filtering);
                                 if mouse.column >= table_rect.x && mouse.column < table_rect.x + table_rect.width && mouse.row >= table_rect.y && mouse.row < table_rect.y + table_rect.height {
-                                    let content_y = table_rect.y + 3; // border + header
-                                    if mouse.row >= content_y && mouse.row < table_rect.y + table_rect.height - 1 {
-                                        let offset = app.table_state.offset();
-                                        let row_idx = (mouse.row - content_y) as usize + offset;
-                                        if row_idx < app.process_data.len() {
-                                            app.table_state.select(Some(row_idx));
+                                    if mouse.row == table_rect.y + 1 {
+                                        // Header clicked
+                                        let inner_rect = table_rect.inner(&Margin { vertical: 1, horizontal: 1 });
+                                        let content_x = inner_rect.x + 3; // Shift by ">> " symbol
+                                        let content_width = inner_rect.width.saturating_sub(3);
+                                        let content_rect = Rect::new(content_x, inner_rect.y, content_width, 1);
+                                        
+                                        let widths = ui::get_column_widths(size);
+                                        let col_rects = Layout::default()
+                                            .direction(Direction::Horizontal)
+                                            .constraints(widths)
+                                            .split(content_rect);
+                                        
+                                        for (i, col_rect) in col_rects.iter().enumerate() {
+                                            if mouse.column >= col_rect.x && mouse.column < col_rect.x + col_rect.width {
+                                                let col = match i {
+                                                    0 => Column::Pid,
+                                                    1 => Column::Name,
+                                                    2 => Column::Up,
+                                                    3 => Column::Down,
+                                                    _ => Column::Total,
+                                                };
+                                                app.toggle_sort(col);
+                                                break;
+                                            }
                                         }
+                                    } else {
+                                        let content_y = table_rect.y + 3; // border + header
+                                        if mouse.row >= content_y && mouse.row < table_rect.y + table_rect.height - 1 {
+                                            let offset = app.table_state.offset();
+                                            let row_idx = (mouse.row - content_y) as usize + offset;
+                                            if row_idx < app.process_data.len() {
+                                                app.table_state.select(Some(row_idx));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Check Footer click (only if no dialog is open)
+                            if !app.show_help && !app.show_alerts && !app.show_kill_dialog && !app.show_graph && !app.show_threshold_dialog && !app.show_detail && !app.show_theme_dialog {
+                                let footer_rect = ui::get_footer_rect(size);
+                                if mouse.row >= footer_rect.y && mouse.row < footer_rect.y + footer_rect.height {
+                                    let text = "q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | a: Alert | A: Alerts | t: Theme | ?: Help";
+                                    let start_x = footer_rect.x + (footer_rect.width.saturating_sub(text.len() as u16)) / 2;
+                                    
+                                    if mouse.column >= start_x && mouse.column < start_x + 7 {
+                                        return Ok(());
+                                    } else if mouse.column >= start_x + 10 && mouse.column < start_x + 17 {
+                                        if app.table_state.selected().is_some() {
+                                            app.show_kill_dialog = true;
+                                        }
+                                    } else if mouse.column >= start_x + 20 && mouse.column < start_x + 27 {
+                                        let next_col = match app.sort_column {
+                                            Column::Pid => Column::Name,
+                                            Column::Name => Column::Up,
+                                            Column::Up => Column::Down,
+                                            Column::Down => Column::Total,
+                                            Column::Total => Column::Pid,
+                                        };
+                                        app.toggle_sort(next_col);
+                                    } else if mouse.column >= start_x + 30 && mouse.column < start_x + 39 {
+                                        app.is_filtering = true;
+                                        app.filter_text.clear();
+                                    } else if mouse.column >= start_x + 42 && mouse.column < start_x + 56 {
+                                        if app.table_state.selected().is_some() {
+                                            app.show_detail = true;
+                                        }
+                                    } else if mouse.column >= start_x + 59 && mouse.column < start_x + 67 {
+                                        if let Some(i) = app.table_state.selected() {
+                                            if let Some(row) = app.process_data.get(i) {
+                                                app.show_graph = true;
+                                                if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
+                                                    let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                                    app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
+                                                    app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                                }
+                                            }
+                                        }
+                                    } else if mouse.column >= start_x + 70 && mouse.column < start_x + 78 {
+                                        if app.table_state.selected().is_some() {
+                                            app.show_threshold_dialog = true;
+                                            app.threshold_input.clear();
+                                        }
+                                    } else if mouse.column >= start_x + 81 && mouse.column < start_x + 90 {
+                                        app.show_alerts = !app.show_alerts;
+                                    } else if mouse.column >= start_x + 93 && mouse.column < start_x + 101 {
+                                        app.show_theme_dialog = !app.show_theme_dialog;
+                                    } else if mouse.column >= start_x + 104 && mouse.column < start_x + 111 {
+                                        app.show_help = true;
                                     }
                                 }
                             }

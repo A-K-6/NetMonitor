@@ -37,9 +37,11 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [ ] **TUI Refinement:**
     - [x] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
     - [x] **Mouse Support:** Basic click-to-select and scroll support for the process table.
-    - [ ] **Extended Mouse Support:** Clickable table headers for sorting and interactive dialog elements.
+    - [x] **Extended Mouse Support:** Clickable table headers for sorting and interactive dialog elements.
+    - [ ] **Time-Travel/Historical Analysis:** Ability to select specific time frames from the database to analyze past network activity.
     - [ ] **Graph UI Overhaul:** Enhanced visualization with better axes, legends, and multi-process overlay support.
     - [ ] **Adaptive Theming:** Support for terminal default colors (transparency/ANSI) and system-wide theme detection.
+- [ ] **Phase 3 Final Review:** A comprehensive, project-wide code review and refactor session to ensure stability before Phase 4.
 ## Phase 4: Stability & Documentation
 *Goal: Professional-grade packaging and rigorous documentation.*
 - [ ] **Performance Audit:** Verify CPU usage remains <1% under heavy network load.
