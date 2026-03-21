@@ -1,5 +1,5 @@
 use ratatui::widgets::{TableState, ListState};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque, HashSet};
 use crate::theme::{Theme, ThemeType};
 
 pub const MAX_HISTORY: usize = 100;
@@ -113,6 +113,13 @@ pub enum ViewMode {
     Alerts,
 }
 
+pub struct GraphSeries {
+    pub pid: u32,
+    pub name: String,
+    pub data_up: Vec<(f64, f64)>,
+    pub data_down: Vec<(f64, f64)>,
+}
+
 pub struct App {
     pub view_mode: ViewMode,
     pub process_data: Vec<ProcessRow>,
@@ -136,8 +143,9 @@ pub struct App {
     pub thresholds: HashMap<u32, u64>, // PID -> KB/s
     pub alerts: VecDeque<Alert>,
     pub graph_time_range: TimeRange,
-    pub graph_data_up: Vec<(f64, f64)>,
-    pub graph_data_down: Vec<(f64, f64)>,
+    pub graph_series: Vec<GraphSeries>,
+    pub graph_scale_log: bool,
+    pub selected_pids: HashSet<u32>,
     pub filter_text: String,
     pub is_filtering: bool,
     pub status_message: Option<String>,
@@ -187,8 +195,9 @@ impl App {
             thresholds: HashMap::new(),
             alerts: VecDeque::with_capacity(MAX_HISTORY),
             graph_time_range: TimeRange::TenMinutes,
-            graph_data_up: Vec::new(),
-            graph_data_down: Vec::new(),
+            graph_series: Vec::new(),
+            graph_scale_log: false,
+            selected_pids: HashSet::new(),
             filter_text: String::new(),
             is_filtering: false,
             status_message: None,

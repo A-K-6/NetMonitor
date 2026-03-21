@@ -1,3 +1,11 @@
+2026-03-21 16:30 - Completed Task 023: Graph UI Overhaul (Visual Analytics).
+- Implemented multi-process overlay support in the traffic history graph.
+- Added a legend to distinguish between different processes and traffic directions (Up/Down).
+- Implemented a toggle for Logarithmic vs. Linear scaling for better visualization of small spikes.
+- Updated the process table to show selection status using `Space` key.
+- Refactored `App` state to use `GraphSeries` and `HashSet<u32>` for selected PIDs.
+- Verified compilation and updated help overlay with new keybindings (`Space`, `l`).
+
 2026-03-21 16:15 - Updated Roadmap and Proposed Task 023.
 - Marked Task 022 (Tabbed Navigation) as complete in `ROADMAP.md`.
 - Proposed Task 023: Graph UI Overhaul (Visual Analytics) in `docs/ideas/todo/023-graph-ui-overhaul.md`.

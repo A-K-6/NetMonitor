@@ -248,20 +248,37 @@ async fn main() -> Result<(), anyhow::Error> {
                             KeyCode::Esc | KeyCode::Char('g') | KeyCode::Char('q') => {
                                 app.show_graph = false;
                             }
+                            KeyCode::Char('l') => {
+                                app.graph_scale_log = !app.graph_scale_log;
+                            }
                             KeyCode::Tab => {
                                 app.graph_time_range = match app.graph_time_range {
                                     TimeRange::TenMinutes => TimeRange::OneHour,
                                     TimeRange::OneHour => TimeRange::TwentyFourHours,
                                     TimeRange::TwentyFourHours => TimeRange::TenMinutes,
                                 };
-                                // Refetch data
-                                if let Some(i) = app.table_state.selected() {
-                                    if let Some(row) = app.process_data.get(i) {
-                                        if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
-                                            let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                            app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
-                                            app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                // Refetch data for all selected PIDs
+                                app.graph_series.clear();
+                                let mut pids_to_fetch = app.selected_pids.iter().cloned().collect::<Vec<_>>();
+                                if pids_to_fetch.is_empty() {
+                                    if let Some(i) = app.table_state.selected() {
+                                        if let Some(row) = app.process_data.get(i) {
+                                            pids_to_fetch.push(row.pid);
                                         }
+                                    }
+                                }
+
+                                for pid in pids_to_fetch {
+                                    if let Ok(history) = db.get_traffic_history(pid, app.graph_time_range) {
+                                        let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
+                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                        
+                                        app.graph_series.push(app::GraphSeries {
+                                            pid,
+                                            name,
+                                            data_up: history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect(),
+                                            data_down: history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect(),
+                                        });
                                     }
                                 }
                             }
@@ -275,6 +292,19 @@ async fn main() -> Result<(), anyhow::Error> {
                                     app.status_message = Some("Exited Historical View".to_string());
                                 } else {
                                     app.is_running = false;
+                                }
+                            }
+                            KeyCode::Char(' ') => {
+                                if app.view_mode == app::ViewMode::ProcessTable {
+                                    if let Some(i) = app.table_state.selected() {
+                                        if let Some(row) = app.process_data.get(i) {
+                                            if app.selected_pids.contains(&row.pid) {
+                                                app.selected_pids.remove(&row.pid);
+                                            } else {
+                                                app.selected_pids.insert(row.pid);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -297,15 +327,29 @@ async fn main() -> Result<(), anyhow::Error> {
                                 app.show_detail = !app.show_detail;
                             }
                             KeyCode::Char('g') => {
-                                if let Some(i) = app.table_state.selected() {
-                                    if let Some(row) = app.process_data.get(i) {
-                                        app.show_graph = true;
-                                        // Fetch data
-                                        if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
-                                            let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                            app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
-                                            app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                app.show_graph = true;
+                                // Fetch data for all selected PIDs
+                                app.graph_series.clear();
+                                let mut pids_to_fetch = app.selected_pids.iter().cloned().collect::<Vec<_>>();
+                                if pids_to_fetch.is_empty() {
+                                    if let Some(i) = app.table_state.selected() {
+                                        if let Some(row) = app.process_data.get(i) {
+                                            pids_to_fetch.push(row.pid);
                                         }
+                                    }
+                                }
+
+                                for pid in pids_to_fetch {
+                                    if let Ok(history) = db.get_traffic_history(pid, app.graph_time_range) {
+                                        let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
+                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                        
+                                        app.graph_series.push(app::GraphSeries {
+                                            pid,
+                                            name,
+                                            data_up: history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect(),
+                                            data_down: history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect(),
+                                        });
                                     }
                                 }
                             }
@@ -562,10 +606,22 @@ async fn main() -> Result<(), anyhow::Error> {
                                                     if let Some(i) = app.table_state.selected() {
                                                         if let Some(row) = app.process_data.get(i) {
                                                             app.show_graph = true;
-                                                            if let Ok(history) = db.get_traffic_history(row.pid, app.graph_time_range) {
-                                                                let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                                                app.graph_data_up = history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect();
-                                                                app.graph_data_down = history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect();
+                                                            app.graph_series.clear();
+                                                            let mut pids_to_fetch = app.selected_pids.iter().cloned().collect::<Vec<_>>();
+                                                            if pids_to_fetch.is_empty() {
+                                                                pids_to_fetch.push(row.pid);
+                                                            }
+                                                            for pid in pids_to_fetch {
+                                                                if let Ok(history) = db.get_traffic_history(pid, app.graph_time_range) {
+                                                                    let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
+                                                                    let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
+                                                                    app.graph_series.push(app::GraphSeries {
+                                                                        pid,
+                                                                        name,
+                                                                        data_up: history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect(),
+                                                                        data_down: history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect(),
+                                                                    });
+                                                                }
                                                             }
                                                         }
                                                     }

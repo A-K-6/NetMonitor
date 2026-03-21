@@ -41,7 +41,7 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
     - [x] **Time-Travel/Historical Analysis:** Ability to select specific time frames from the database to analyze past network activity.
     - [x] **Global Dashboard (Overall View):** Comprehensive system-wide analysis with aggregated protocol stats, top-talkers, and network health metrics.
     - [x] **Tabbed Navigation:** Implement a tabbed interface to seamlessly switch between "Global Dashboard", "Process Monitor", and "Alerts".
-    - [ ] **Graph UI Overhaul (Task 023):** Enhanced visualization with better axes, legends, and multi-process overlay support.
+    - [x] **Graph UI Overhaul (Task 023):** Enhanced visualization with better axes, legends, and multi-process overlay support with logarithmic scaling.
     - [ ] **Adaptive Theming:** Support for terminal default colors (transparency/ANSI) and system-wide theme detection.
 - [ ] **Phase 3 Final Review:** A comprehensive, project-wide code review and refactor session to ensure stability before Phase 4.
 ## Phase 4: Stability & Documentation
