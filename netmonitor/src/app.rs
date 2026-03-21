@@ -108,8 +108,9 @@ impl TimeRange {
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum ViewMode {
-    ProcessTable,
     Dashboard,
+    ProcessTable,
+    Alerts,
 }
 
 pub struct App {
@@ -164,7 +165,7 @@ impl App {
         historical_range_state.select(Some(0));
 
         Self {
-            view_mode: ViewMode::ProcessTable,
+            view_mode: ViewMode::Dashboard,
             process_data: Vec::new(),
             total_upload: 0,
             total_download: 0,
