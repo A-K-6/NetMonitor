@@ -1,3 +1,16 @@
+2026-03-21 13:25 - Updated ROADMAP.md and Proposed Task 020.
+- Updated Phase 3 of the roadmap to mark Task 019 as completed.
+- Added Task 020: Time-Travel/Historical Analysis to the roadmap.
+- Added "Phase 3 Final Review" to the roadmap for project-wide code review.
+- Proposed new feature: Time frame selection for historical analysis (Task 020).
+
+2026-03-21 13:15 - Completed Task 019: Extended Mouse Support.
+- Implemented clickable table headers for sorting by PID, Name, Up/Down rate, or Total.
+- Added mouse click support for "(y)es" and "(n)o" buttons in the Kill confirmation dialog.
+- Added mouse click support for footer keybinding hints (Quit, Kill, Sort, Filter, etc.).
+- Refactored `netmonitor/src/ui.rs` to expose `get_footer_rect` and `get_column_widths` for userspace hit-testing.
+- Verified compilation with `cargo check`.
+
 2026-03-21 12:45 - Proposed Task 019: Extended Mouse Support.
 - Created `docs/ideas/todo/019-extended-mouse-support.md`.
 - Planned implementation of clickable table headers to toggle sorting by PID, Name, Up/Down rate, or Total.

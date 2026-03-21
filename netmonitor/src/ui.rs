@@ -156,23 +156,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     }).collect();
 
     // Check if terminal is small
-    let widths = if size.width < 60 {
-        [
-            Constraint::Percentage(20),
-            Constraint::Percentage(40),
-            Constraint::Percentage(40),
-            Constraint::Percentage(0),
-            Constraint::Percentage(0),
-        ]
-    } else {
-        [
-            Constraint::Percentage(15),
-            Constraint::Percentage(25),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-        ]
-    };
+    let widths = get_column_widths(size);
 
     let table = Table::new(rows, widths)
         .header(table_header)
@@ -282,8 +266,60 @@ pub fn get_table_rect(size: Rect, is_filtering: bool) -> Rect {
             Constraint::Min(0),
         ])
         .split(chunks[1]);
-    
+
     main_chunks[1]
+}
+
+pub fn get_footer_rect(size: Rect) -> Rect {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Header
+            Constraint::Min(5),    // Main
+            Constraint::Length(3), // Footer
+        ])
+        .split(size);
+    chunks[2]
+}
+
+pub fn get_column_widths(size: Rect) -> Vec<Constraint> {
+    if size.width < 60 {
+        vec![
+            Constraint::Percentage(20),
+            Constraint::Percentage(40),
+            Constraint::Percentage(40),
+            Constraint::Percentage(0),
+            Constraint::Percentage(0),
+        ]
+    } else {
+        vec![
+            Constraint::Percentage(15),
+            Constraint::Percentage(25),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+        ]
+    }
+}
+
+pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
 
 fn render_theme_dialog(f: &mut Frame, app: &mut App, size: Rect) {
@@ -535,24 +571,4 @@ fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
             ]));
 
     f.render_widget(chart, area);
-}
-
-pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }
