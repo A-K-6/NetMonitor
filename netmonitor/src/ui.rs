@@ -122,7 +122,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let footer_text = if app.is_filtering {
         "Type to filter | Enter/Esc: Finish".to_string()
     } else if app.show_graph {
-        format!("Tab: Cycle Range ({}) | g/Esc: Close", app.graph_time_range.label())
+        format!("Tab: Cycle Range ({}) | l: Toggle Scale ({}) | g/Esc: Close", app.graph_time_range.label(), if app.graph_scale_log { "Log" } else { "Linear" })
     } else if app.show_historical_dialog {
         "Up/Down: Cycle | Enter: Select | Esc/H: Close".to_string()
     } else if app.show_threshold_dialog {
@@ -318,8 +318,11 @@ fn render_process_table(f: &mut Frame, app: &mut App, area: Rect) {
             Style::default().fg(theme.row_fg)
         };
 
+        let is_selected = app.selected_pids.contains(&item.pid);
+        let pid_text = if is_selected { format!("[x] {}", item.pid) } else { format!("[ ] {}", item.pid) };
+
         let cells = vec![
-            Cell::from(item.pid.to_string()).style(base_style),
+            Cell::from(pid_text).style(if is_selected { base_style.fg(theme.highlight_fg) } else { base_style }),
             Cell::from(item.name.clone()).style(base_style),
             Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.upload_fg) }),
             Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.download_fg) }),
@@ -707,12 +710,14 @@ fn render_help_overlay(f: &mut Frame, app: &App, size: Rect) {
     let help_text = vec![
         Row::new(vec![Cell::from("q / Esc"), Cell::from("Quit / Back")]),
         Row::new(vec![Cell::from("k"), Cell::from("Kill selected process")]),
+        Row::new(vec![Cell::from("Space"), Cell::from("Toggle multi-process selection for graph")]),
         Row::new(vec![Cell::from("a"), Cell::from("Set bandwidth threshold for selected process")]),
         Row::new(vec![Cell::from("A"), Cell::from("View recent alerts log")]),
         Row::new(vec![Cell::from("s"), Cell::from("Cycle sort column (Pid -> Name -> Up -> Down -> Total)")]),
         Row::new(vec![Cell::from("/"), Cell::from("Filter by process name")]),
         Row::new(vec![Cell::from("Enter"), Cell::from("Deep-dive into process connections")]),
         Row::new(vec![Cell::from("g"), Cell::from("Traffic history graph (requires historical data)")]),
+        Row::new(vec![Cell::from("l"), Cell::from("Toggle Log/Linear scale in graph view")]),
         Row::new(vec![Cell::from("t"), Cell::from("Theme selector")]),
         Row::new(vec![Cell::from("?"), Cell::from("Toggle this help screen")]),
         Row::new(vec![Cell::from("Up/Down"), Cell::from("Navigate process table / menus")]),
@@ -734,38 +739,68 @@ fn render_help_overlay(f: &mut Frame, app: &App, size: Rect) {
 
 fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
     let theme = &app.current_theme;
-    let area = centered_rect(90, 80, size);
+    let area = centered_rect(95, 85, size);
     f.render_widget(Clear, area);
 
-    let selected_proc = app.table_state.selected()
-        .and_then(|i| app.process_data.get(i));
+    let title = format!(
+        " Traffic History ({} scale) - [{}] ",
+        if app.graph_scale_log { "Logarithmic" } else { "Linear" },
+        app.graph_time_range.label()
+    );
 
-    let title = match selected_proc {
-        Some(p) => format!(" Traffic History: {} (PID: {}) - [{}] ", p.name, p.pid, app.graph_time_range.label()),
-        None => " Traffic History ".to_string(),
-    };
+    // Prepare colors for different processes
+    let colors = [
+        theme.upload_fg,
+        theme.download_fg,
+        theme.highlight_fg,
+        theme.alert_fg,
+        theme.header_fg,
+        theme.status_fg,
+    ];
 
-    let up_dataset = Dataset::default()
-        .name("Upload (KB/s)")
-        .marker(symbols::Marker::Braille)
-        .graph_type(GraphType::Line)
-        .style(Style::default().fg(theme.upload_fg))
-        .data(&app.graph_data_up);
+    // Prepare all data first to ensure it lives long enough for the chart
+    let prepared_data: Vec<(Vec<(f64, f64)>, Vec<(f64, f64)>, String, u32)> = app.graph_series.iter().map(|series| {
+        let up = if app.graph_scale_log {
+            series.data_up.iter().map(|(x, y)| (*x, (*y + 1.0).log10())).collect()
+        } else {
+            series.data_up.clone()
+        };
+        let down = if app.graph_scale_log {
+            series.data_down.iter().map(|(x, y)| (*x, (*y + 1.0).log10())).collect()
+        } else {
+            series.data_down.clone()
+        };
+        (up, down, series.name.clone(), series.pid)
+    }).collect();
 
-    let down_dataset = Dataset::default()
-        .name("Download (KB/s)")
-        .marker(symbols::Marker::Braille)
-        .graph_type(GraphType::Line)
-        .style(Style::default().fg(theme.download_fg))
-        .data(&app.graph_data_down);
+    let mut datasets = Vec::new();
+    let mut current_max_y: f64 = 0.0;
 
-    let max_up = app.graph_data_up.iter().map(|(_, v)| *v).fold(0.0, f64::max);
-    let max_down = app.graph_data_down.iter().map(|(_, v)| *v).fold(0.0, f64::max);
-    let max_y = (max_up.max(max_down) * 1.2).max(10.0);
+    for (i, (up, down, name, _pid)) in prepared_data.iter().enumerate() {
+        let color = colors[i % colors.len()];
+        datasets.push(Dataset::default()
+            .name(format!("{} (Up)", name))
+            .marker(symbols::Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::default().fg(color))
+            .data(up));
+        
+        datasets.push(Dataset::default()
+            .name(format!("{} (Down)", name))
+            .marker(symbols::Marker::Dot)
+            .graph_type(GraphType::Line)
+            .style(Style::default().fg(color).add_modifier(Modifier::DIM))
+            .data(down));
+        
+        let series_max = up.iter().chain(down.iter()).map(|(_, v)| *v).fold(0.0, f64::max);
+        current_max_y = current_max_y.max(series_max);
+    }
 
+    let max_y = (current_max_y * 1.2).max(1.0);
     let x_bounds = [0.0, app.graph_time_range.to_seconds() as f64];
+    let y_label = if app.graph_scale_log { "Log10(KB/s + 1)" } else { "KB/s" };
     
-    let chart = Chart::new(vec![up_dataset, down_dataset])
+    let chart = Chart::new(datasets)
         .block(Block::default()
             .borders(Borders::ALL)
             .title(title)
@@ -780,7 +815,7 @@ fn render_graph_view(f: &mut Frame, app: &App, size: Rect) {
                 Span::styled("0", Style::default()),
             ]))
         .y_axis(Axis::default()
-            .title("KB/s")
+            .title(y_label)
             .style(Style::default().fg(theme.status_fg))
             .bounds([0.0, max_y])
             .labels(vec![
