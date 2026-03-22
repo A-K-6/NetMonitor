@@ -1,3 +1,21 @@
+2026-03-22 11:10 - Corrected Roadmap and Restored Feature Goals.
+- Restored "Container & Service Context", "Active Traffic Shaping", and "Headless Data Exporting" to the Roadmap as high-level goals.
+- Removed all Task IDs/numbers from the Roadmap to maintain a clean, goal-oriented view.
+- Polished the Persistent Configuration idea file as the primary next step.
+
+2026-03-22 11:00 - Refined Roadmap and Polished Persistent Config Idea.
+- Cleaned up `ROADMAP.md`: Removed explicit task numbering and premature feature entries for Container Context, Traffic Shaping, and Headless Exporting.
+- Polished `docs/ideas/todo/025-persistent-config.md`: Added a detailed TOML schema, implementation phases, and technical specifications.
+- Removed premature idea files (026, 027, 028) to focus on the current priority.
+
+2026-03-22 10:30 - Completed Task 024: Adaptive Theming (System Integration).
+- Integrated `dark-light` crate for system-wide light/dark mode detection on startup.
+- Implemented `ThemeType::Terminal` using standard 16-color ANSI palettes and `Color::Reset`.
+- Enhanced the theme engine to support a `bg` color, allowing for background transparency.
+- Updated `ui.rs` to ensure all widgets respect the theme's background color.
+- Refined existing themes (Dracula, Solarized, Monokai) with explicit background colors for consistency.
+- Verified compilation and updated theme selection dialog to include "Auto" and "Terminal" options.
+
 2026-03-21 16:30 - Completed Task 023: Graph UI Overhaul (Visual Analytics).
 - Implemented multi-process overlay support in the traffic history graph.
 - Added a legend to distinguish between different processes and traffic directions (Up/Down).

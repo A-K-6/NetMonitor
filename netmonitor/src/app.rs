@@ -1,6 +1,7 @@
 use ratatui::widgets::{TableState, ListState};
 use std::collections::{HashMap, VecDeque, HashSet};
 use crate::theme::{Theme, ThemeType};
+use dark_light::Mode;
 
 pub const MAX_HISTORY: usize = 100;
 
@@ -167,10 +168,17 @@ pub struct App {
 impl App {
     pub fn new(historical_data: HashMap<u32, ProcessRow>) -> Self {
         let mut theme_state = ListState::default();
-        theme_state.select(Some(0));
+        theme_state.select(Some(0)); // Auto is index 0
 
         let mut historical_range_state = ListState::default();
         historical_range_state.select(Some(0));
+
+        let current_theme_type = ThemeType::Auto;
+        let current_theme = match dark_light::detect() {
+            Mode::Dark => Theme::from_type(ThemeType::Default),
+            Mode::Light => Theme::from_type(ThemeType::Terminal),
+            Mode::Default => Theme::from_type(ThemeType::Default),
+        };
 
         Self {
             view_mode: ViewMode::Dashboard,
@@ -189,8 +197,8 @@ impl App {
             show_alerts: false,
             show_theme_dialog: false,
             theme_state,
-            current_theme: Theme::from_type(ThemeType::Default),
-            current_theme_type: ThemeType::Default,
+            current_theme,
+            current_theme_type,
             threshold_input: String::new(),
             thresholds: HashMap::new(),
             alerts: VecDeque::with_capacity(MAX_HISTORY),
@@ -279,7 +287,15 @@ impl App {
             let themes = ThemeType::all();
             if let Some(t_type) = themes.get(i) {
                 self.current_theme_type = *t_type;
-                self.current_theme = Theme::from_type(*t_type);
+                if *t_type == ThemeType::Auto {
+                    self.current_theme = match dark_light::detect() {
+                        Mode::Dark => Theme::from_type(ThemeType::Default),
+                        Mode::Light => Theme::from_type(ThemeType::Terminal),
+                        Mode::Default => Theme::from_type(ThemeType::Default),
+                    };
+                } else {
+                    self.current_theme = Theme::from_type(*t_type);
+                }
             }
         }
     }
