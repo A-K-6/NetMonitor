@@ -1,3 +1,12 @@
+2026-03-22 18:30 - Completed Task 028: Comprehensive README & Documentation.
+- Created a professional `README.md` featuring a custom ASCII header and clear project mission.
+- Documented all core and advanced features, including the new Traffic Shaping (Throttling) capability.
+- Detailed the full suite of TUI hotkeys (Navigation, Sorting, Killing, Throttling, etc.).
+- Provided a technical architecture overview of the eBPF hooks (TCP/UDP/RAW/Cgroup) and Rust components.
+- Added a "Quick Start" guide with installation steps and capability management instructions.
+- Documented the `config.toml` structure for user personalization.
+- Updated `ROADMAP.md` and archived the idea file as completed.
+
 2026-03-22 17:45 - Completed Task 027: Active Traffic Shaping (Bandwidth Throttling).
 - Implemented `cgroup_skb` eBPF programs for egress and ingress to enforce bandwidth limits.
 - Developed a Token Bucket Filter (TBF) algorithm in eBPF with nanosecond precision using `bpf_ktime_get_ns()`.
