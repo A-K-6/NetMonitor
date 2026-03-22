@@ -135,6 +135,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
         "Up/Down: Cycle | Enter: Select | Esc/H: Close".to_string()
     } else if app.show_threshold_dialog {
         "Enter: Set Threshold (KB/s) | Esc: Cancel".to_string()
+    } else if app.show_throttle_dialog {
+        "Enter: Set Limit (KB/s) | Esc: Cancel".to_string()
     } else if app.show_theme_dialog {
         "Up/Down: Cycle | Enter: Apply | Esc/t: Close".to_string()
     } else if let Some(msg) = &app.status_message {
@@ -144,7 +146,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     } else {
         match app.view_mode {
             crate::app::ViewMode::Dashboard => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
-            crate::app::ViewMode::ProcessTable => "Tab/F1-F3: Switch | q: Quit | k: Kill | s: Sort | c: Context | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | t: Theme | ?: Help".to_string(),
+            crate::app::ViewMode::ProcessTable => "Tab/F1-F3: Switch | q: Quit | k: Kill | s: Sort | b: Throttle | c: Context | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | t: Theme | ?: Help".to_string(),
             crate::app::ViewMode::Alerts => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
         }
     };
@@ -202,6 +204,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
             .alignment(Alignment::Center);
         f.render_widget(Clear, area);
         f.render_widget(dialog, area);
+    }
+
+    // Throttle Dialog
+    if app.show_throttle_dialog {
+        render_throttle_dialog(f, app, size);
     }
 
     // Alerts Overlay
@@ -336,11 +343,18 @@ fn render_process_table(f: &mut Frame, app: &mut App, area: Rect) {
 
         let is_selected = app.selected_pids.contains(&item.pid);
         let pid_text = if is_selected { format!("[x] {}", item.pid) } else { format!("[ ] {}", item.pid) };
+        
+        let throttle = app.throttles.get(&item.pid);
         let name_val = if app.show_context { item.context.label() } else { item.name.clone() };
+        let name_display = if throttle.is_some() {
+            format!("[L] {}", name_val)
+        } else {
+            name_val
+        };
 
         let cells = vec![
             Cell::from(pid_text).style(if is_selected { base_style.fg(theme.highlight_fg) } else { base_style }),
-            Cell::from(name_val).style(base_style),
+            Cell::from(name_display).style(base_style),
             Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.upload_fg).bg(theme.bg) }),
             Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.download_fg).bg(theme.bg) }),
             Cell::from(Line::from(format!("{:.2}", total)).alignment(Alignment::Right)).style(base_style),
@@ -889,4 +903,20 @@ fn render_historical_dialog(f: &mut Frame, app: &mut App, size: Rect) {
         .style(Style::default().bg(theme.bg));
 
     f.render_stateful_widget(list, area, &mut app.historical_range_state);
+}
+
+fn render_throttle_dialog(f: &mut Frame, app: &mut App, size: Rect) {
+    let theme = &app.current_theme;
+    let area = centered_rect(40, 20, size);
+    let pid = app.table_state.selected().and_then(|i| app.process_data.get(i)).map(|p| p.pid);
+    let text = format!("\nSet Bandwidth Limit for PID {:?} (KB/s):\n(0 to remove)\n\n {}_ ", pid, app.throttle_input);
+    let dialog = Paragraph::new(text)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(" Traffic Shaping / Throttle ")
+            .style(Style::default().fg(theme.upload_fg).bg(theme.bg))
+            .border_style(Style::default().fg(theme.border_fg)))
+        .alignment(Alignment::Center);
+    f.render_widget(Clear, area);
+    f.render_widget(dialog, area);
 }

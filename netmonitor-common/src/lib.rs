@@ -22,7 +22,19 @@ pub struct ConnectionKey {
     pub dst_port: u16,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(C)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ThrottleConfig {
+    pub rate_bytes_per_sec: u64,
+    pub bucket_size: u64,
+    pub last_refill_ts: u64,
+    pub tokens: u64,
+}
+
 #[cfg(feature = "user")]
 unsafe impl aya::Pod for TrafficStats {}
 #[cfg(feature = "user")]
 unsafe impl aya::Pod for ConnectionKey {}
+#[cfg(feature = "user")]
+unsafe impl aya::Pod for ThrottleConfig {}

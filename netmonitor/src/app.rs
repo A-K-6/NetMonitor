@@ -139,6 +139,7 @@ pub struct App {
     pub show_graph: bool,
     pub show_help: bool,
     pub show_threshold_dialog: bool,
+    pub show_throttle_dialog: bool,
     pub show_alerts: bool,
     pub show_theme_dialog: bool,
     pub show_context: bool,
@@ -146,7 +147,9 @@ pub struct App {
     pub current_theme: Theme,
     pub current_theme_type: ThemeType,
     pub threshold_input: String,
+    pub throttle_input: String,
     pub thresholds: HashMap<u32, u64>, // PID -> KB/s
+    pub throttles: HashMap<u32, u64>, // PID -> KB/s
     pub alerts: VecDeque<Alert>,
     pub graph_time_range: TimeRange,
     pub graph_series: Vec<GraphSeries>,
@@ -213,6 +216,7 @@ impl App {
             show_graph: config.ui.show_graph,
             show_help: false,
             show_threshold_dialog: false,
+            show_throttle_dialog: false,
             show_alerts: false,
             show_theme_dialog: false,
             show_context: false,
@@ -220,7 +224,9 @@ impl App {
             current_theme,
             current_theme_type,
             threshold_input: String::new(),
+            throttle_input: String::new(),
             thresholds: HashMap::new(), // Per-process thresholds could be loaded here too
+            throttles: HashMap::new(), // PID -> KB/s
             alerts: VecDeque::with_capacity(MAX_HISTORY),
             graph_time_range: TimeRange::TenMinutes,
             graph_series: Vec::new(),

@@ -14,12 +14,12 @@ use config::Config;
 use clap::Parser;
 use std::path::PathBuf;
 use aya::maps::HashMap;
-use aya::programs::KProbe;
+use aya::programs::{KProbe, CgroupSkb, CgroupSkbAttachType, CgroupAttachMode};
 use aya::Ebpf;
 use aya_log::EbpfLogger;
 use caps::{CapSet, Capability, has_cap};
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEventKind, MouseButton};
-use netmonitor_common::{TrafficStats, ConnectionKey};
+use netmonitor_common::{TrafficStats, ConnectionKey, ThrottleConfig};
 use process::ProcessResolver;
 use ratatui::layout::{Direction, Layout, Margin, Rect};
 use std::env;
@@ -100,9 +100,21 @@ async fn main() -> Result<(), anyhow::Error> {
     raw_recv.load()?;
     raw_recv.attach("raw_recvmsg", 0)?;
 
+    // Load Traffic Shaping (Cgroup SKB)
+    let egress: &mut CgroupSkb = bpf.program_mut("throttle_egress").expect("throttle_egress not found").try_into()?;
+    egress.load()?;
+    let cgroup_file = std::fs::File::open("/sys/fs/cgroup")?;
+    egress.attach(cgroup_file, CgroupSkbAttachType::Egress, CgroupAttachMode::default())?;
+
+    let ingress: &mut CgroupSkb = bpf.program_mut("throttle_ingress").expect("throttle_ingress not found").try_into()?;
+    ingress.load()?;
+    let cgroup_file_in = std::fs::File::open("/sys/fs/cgroup")?;
+    ingress.attach(cgroup_file_in, CgroupSkbAttachType::Ingress, CgroupAttachMode::default())?;
+
     let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.take_map("TRAFFIC_STATS").unwrap())?;
     let connections_map: HashMap<_, ConnectionKey, TrafficStats> = 
         HashMap::try_from(bpf.take_map("CONNECTIONS").unwrap())?;
+    let mut throttle_map: HashMap<_, u32, ThrottleConfig> = HashMap::try_from(bpf.take_map("THROTTLE_CONFIG").unwrap())?;
 
     let mut db = DbManager::new("netmonitor.db")?;
     let historical_data = db.load_historical_stats()?;
@@ -216,6 +228,46 @@ async fn main() -> Result<(), anyhow::Error> {
                             KeyCode::Esc => {
                                 app.show_threshold_dialog = false;
                                 app.threshold_input.clear();
+                            }
+                            _ => {}
+                        }
+                    } else if app.show_throttle_dialog {
+                        match key.code {
+                            KeyCode::Char(c) if c.is_digit(10) => {
+                                app.throttle_input.push(c);
+                            }
+                            KeyCode::Backspace => {
+                                app.throttle_input.pop();
+                            }
+                            KeyCode::Enter => {
+                                if let Some(i) = app.table_state.selected() {
+                                    if let Some(row) = app.process_data.get(i) {
+                                        if let Ok(val) = app.throttle_input.parse::<u64>() {
+                                            if val > 0 {
+                                                app.throttles.insert(row.pid, val);
+                                                // Update eBPF map
+                                                let config = ThrottleConfig {
+                                                    rate_bytes_per_sec: val * 1024,
+                                                    bucket_size: val * 1024 * 2, // 2 seconds burst
+                                                    last_refill_ts: 0,
+                                                    tokens: val * 1024 * 2,
+                                                };
+                                                let _ = throttle_map.insert(&row.pid, &config, 0);
+                                                app.status_message = Some(format!("Throttled {} to {} KB/s", row.name, val));
+                                            } else {
+                                                app.throttles.remove(&row.pid);
+                                                let _ = throttle_map.remove(&row.pid);
+                                                app.status_message = Some(format!("Removed throttle for {}", row.name));
+                                            }
+                                        }
+                                    }
+                                }
+                                app.show_throttle_dialog = false;
+                                app.throttle_input.clear();
+                            }
+                            KeyCode::Esc => {
+                                app.show_throttle_dialog = false;
+                                app.throttle_input.clear();
                             }
                             _ => {}
                         }
@@ -406,6 +458,12 @@ async fn main() -> Result<(), anyhow::Error> {
                                     app.threshold_input.clear();
                                 }
                             }
+                            KeyCode::Char('b') => {
+                                if app.table_state.selected().is_some() {
+                                    app.show_throttle_dialog = true;
+                                    app.throttle_input.clear();
+                                }
+                            }
                             KeyCode::Char('A') => {
                                 app.show_alerts = !app.show_alerts;
                             }
@@ -494,7 +552,7 @@ async fn main() -> Result<(), anyhow::Error> {
                                         }
                                     }
                                 }
-                            } else if !app.show_help && !app.show_alerts && !app.show_graph && !app.show_threshold_dialog && !app.show_detail {
+                            } else if !app.show_help && !app.show_alerts && !app.show_graph && !app.show_threshold_dialog && !app.show_throttle_dialog && !app.show_detail {
                                 // Check Tab click
                                 let tab_rect = Rect::new(0, 3, size.width, 3);
                                 if mouse.row >= tab_rect.y && mouse.row < tab_rect.y + tab_rect.height {
@@ -550,7 +608,7 @@ async fn main() -> Result<(), anyhow::Error> {
                             }
                             
                             // Check Footer click (only if no dialog is open)
-                            if !app.show_help && !app.show_alerts && !app.show_kill_dialog && !app.show_graph && !app.show_threshold_dialog && !app.show_detail && !app.show_theme_dialog && !app.show_historical_dialog {
+                            if !app.show_help && !app.show_alerts && !app.show_kill_dialog && !app.show_graph && !app.show_threshold_dialog && !app.show_throttle_dialog && !app.show_detail && !app.show_theme_dialog && !app.show_historical_dialog {
                                 let footer_rect = ui::get_footer_rect(size);
                                 if mouse.row >= footer_rect.y && mouse.row < footer_rect.y + footer_rect.height {
                                     let text = if app.historical_view_mode {
@@ -625,14 +683,19 @@ async fn main() -> Result<(), anyhow::Error> {
                                                         Column::Total => Column::Pid,
                                                     };
                                                     app.toggle_sort(next_col);
-                                                } else if mouse.column >= start_x + 48 && mouse.column < start_x + 57 {
+                                                } else if mouse.column >= start_x + 48 && mouse.column < start_x + 59 {
+                                                    if app.table_state.selected().is_some() {
+                                                        app.show_throttle_dialog = true;
+                                                        app.throttle_input.clear();
+                                                    }
+                                                } else if mouse.column >= start_x + 62 && mouse.column < start_x + 71 {
                                                     app.is_filtering = true;
                                                     app.filter_text.clear();
-                                                } else if mouse.column >= start_x + 60 && mouse.column < start_x + 74 {
+                                                } else if mouse.column >= start_x + 74 && mouse.column < start_x + 88 {
                                                     if app.table_state.selected().is_some() {
                                                         app.show_detail = true;
                                                     }
-                                                } else if mouse.column >= start_x + 77 && mouse.column < start_x + 85 {
+                                                } else if mouse.column >= start_x + 91 && mouse.column < start_x + 99 {
                                                     if let Some(i) = app.table_state.selected() {
                                                         if let Some(row) = app.process_data.get(i) {
                                                             app.show_graph = true;
@@ -655,16 +718,16 @@ async fn main() -> Result<(), anyhow::Error> {
                                                             }
                                                         }
                                                     }
-                                                } else if mouse.column >= start_x + 88 && mouse.column < start_x + 98 {
+                                                } else if mouse.column >= start_x + 102 && mouse.column < start_x + 112 {
                                                     app.show_historical_dialog = true;
-                                                } else if mouse.column >= start_x + 101 && mouse.column < start_x + 109 {
+                                                } else if mouse.column >= start_x + 115 && mouse.column < start_x + 123 {
                                                     if app.table_state.selected().is_some() {
                                                         app.show_threshold_dialog = true;
                                                         app.threshold_input.clear();
                                                     }
-                                                } else if mouse.column >= start_x + 112 && mouse.column < start_x + 120 {
+                                                } else if mouse.column >= start_x + 126 && mouse.column < start_x + 134 {
                                                     app.show_theme_dialog = !app.show_theme_dialog;
-                                                } else if mouse.column >= start_x + 123 && mouse.column < start_x + 130 {
+                                                } else if mouse.column >= start_x + 137 && mouse.column < start_x + 144 {
                                                     app.show_help = true;
                                                 }
                                             }

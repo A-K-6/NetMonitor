@@ -1,3 +1,11 @@
+2026-03-22 17:45 - Completed Task 027: Active Traffic Shaping (Bandwidth Throttling).
+- Implemented `cgroup_skb` eBPF programs for egress and ingress to enforce bandwidth limits.
+- Developed a Token Bucket Filter (TBF) algorithm in eBPF with nanosecond precision using `bpf_ktime_get_ns()`.
+- Added `ThrottleConfig` map to `netmonitor-ebpf` for per-PID bandwidth management.
+- Integrated `ThrottleManager` logic into the TUI with a new hotkey 'b' to set limits in KB/s.
+- Enhanced the Process Table with a `[L]` (Limited) indicator for throttled processes.
+- Verified compilation and linking for both eBPF and userspace components.
+
 2026-03-22 15:30 - Strategic Roadmap Expansion for v0.1.0 and Production Hardening.
 - Expanded `ROADMAP.md` with detailed Phase 4 (Stability & Testing) and Phase 5 (Release v0.1.0).
 - Introduced **Phase 6: Hardening & Ecosystem** to address security audits, least privilege, and long-term maintainability.
