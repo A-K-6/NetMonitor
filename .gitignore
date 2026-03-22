@@ -33,3 +33,7 @@ dist/
 
 # db
 *.db
+
+# Gemini Specifics (Local Only)
+GEMINI.md
+.gemini/
