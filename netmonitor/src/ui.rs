@@ -144,7 +144,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     } else {
         match app.view_mode {
             crate::app::ViewMode::Dashboard => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
-            crate::app::ViewMode::ProcessTable => "Tab/F1-F3: Switch | q: Quit | k: Kill | s: Sort | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | t: Theme | ?: Help".to_string(),
+            crate::app::ViewMode::ProcessTable => "Tab/F1-F3: Switch | q: Quit | k: Kill | s: Sort | c: Context | /: Filter | Enter: Details | g: Graph | H: History | a: Alert | t: Theme | ?: Help".to_string(),
             crate::app::ViewMode::Alerts => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
         }
     };
@@ -293,13 +293,14 @@ fn render_process_table(f: &mut Frame, app: &mut App, area: Rect) {
     let up_label = if app.historical_view_mode { "UP (KB)" } else { "UP (KB/s)" };
     let down_label = if app.historical_view_mode { "DOWN (KB)" } else { "DOWN (KB/s)" };
 
-    let header_cells = ["PID", "NAME", up_label, down_label, "TOTAL (KB)"]
+    let name_header = if app.show_context { "CONTEXT" } else { "NAME" };
+    let header_cells = ["PID", name_header, up_label, down_label, "TOTAL (KB)"]
         .into_iter()
         .enumerate()
         .map(|(i, h)| {
             let col = match i {
                 0 => Column::Pid,
-                1 => Column::Name,
+                1 => if app.show_context { Column::Context } else { Column::Name },
                 2 => Column::Up,
                 3 => Column::Down,
                 _ => Column::Total,
@@ -335,10 +336,11 @@ fn render_process_table(f: &mut Frame, app: &mut App, area: Rect) {
 
         let is_selected = app.selected_pids.contains(&item.pid);
         let pid_text = if is_selected { format!("[x] {}", item.pid) } else { format!("[ ] {}", item.pid) };
+        let name_val = if app.show_context { item.context.label() } else { item.name.clone() };
 
         let cells = vec![
             Cell::from(pid_text).style(if is_selected { base_style.fg(theme.highlight_fg) } else { base_style }),
-            Cell::from(item.name.clone()).style(base_style),
+            Cell::from(name_val).style(base_style),
             Cell::from(Line::from(format!("{:.2}", up)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.upload_fg).bg(theme.bg) }),
             Cell::from(Line::from(format!("{:.2}", down)).alignment(Alignment::Right)).style(if exceeded { base_style } else { Style::default().fg(theme.download_fg).bg(theme.bg) }),
             Cell::from(Line::from(format!("{:.2}", total)).alignment(Alignment::Right)).style(base_style),
@@ -746,8 +748,9 @@ fn render_help_overlay(f: &mut Frame, app: &App, size: Rect) {
         Row::new(vec![Cell::from("Space"), Cell::from("Toggle multi-process selection for graph")]),
         Row::new(vec![Cell::from("a"), Cell::from("Set bandwidth threshold for selected process")]),
         Row::new(vec![Cell::from("A"), Cell::from("View recent alerts log")]),
-        Row::new(vec![Cell::from("s"), Cell::from("Cycle sort column (Pid -> Name -> Up -> Down -> Total)")]),
-        Row::new(vec![Cell::from("/"), Cell::from("Filter by process name")]),
+        Row::new(vec![Cell::from("s"), Cell::from("Cycle sort column (Pid -> Name -> Context -> Up -> Down -> Total)")]),
+        Row::new(vec![Cell::from("c"), Cell::from("Toggle between Binary Name and Service Context")]),
+        Row::new(vec![Cell::from("/"), Cell::from("Filter by process name/context")]),
         Row::new(vec![Cell::from("Enter"), Cell::from("Deep-dive into process connections")]),
         Row::new(vec![Cell::from("g"), Cell::from("Traffic history graph (requires historical data)")]),
         Row::new(vec![Cell::from("l"), Cell::from("Toggle Log/Linear scale in graph view")]),

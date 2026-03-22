@@ -385,12 +385,17 @@ async fn main() -> Result<(), anyhow::Error> {
                                 // Cycle sort columns
                                 let next_col = match app.sort_column {
                                     Column::Pid => Column::Name,
-                                    Column::Name => Column::Up,
+                                    Column::Name => Column::Context,
+                                    Column::Context => Column::Up,
                                     Column::Up => Column::Down,
                                     Column::Down => Column::Total,
                                     Column::Total => Column::Pid,
                                 };
                                 app.toggle_sort(next_col);
+                            }
+                            KeyCode::Char('c') => {
+                                app.show_context = !app.show_context;
+                                app.status_message = Some(format!("Context view: {}", if app.show_context { "Enabled" } else { "Disabled" }));
                             }
                             KeyCode::Char('?') | KeyCode::Char('h') => {
                                 app.show_help = true;
@@ -521,7 +526,7 @@ async fn main() -> Result<(), anyhow::Error> {
                                                 if mouse.column >= col_rect.x && mouse.column < col_rect.x + col_rect.width {
                                                     let col = match i {
                                                         0 => Column::Pid,
-                                                        1 => Column::Name,
+                                                        1 => if app.show_context { Column::Context } else { Column::Name },
                                                         2 => Column::Up,
                                                         3 => Column::Down,
                                                         _ => Column::Total,
@@ -566,7 +571,8 @@ async fn main() -> Result<(), anyhow::Error> {
                                         } else if mouse.column >= start_x + 12 && mouse.column < start_x + 19 {
                                             let next_col = match app.sort_column {
                                                 Column::Pid => Column::Name,
-                                                Column::Name => Column::Up,
+                                                Column::Name => Column::Context,
+                                                Column::Context => Column::Up,
                                                 Column::Up => Column::Down,
                                                 Column::Down => Column::Total,
                                                 Column::Total => Column::Pid,
@@ -612,7 +618,8 @@ async fn main() -> Result<(), anyhow::Error> {
                                                 } else if mouse.column >= start_x + 38 && mouse.column < start_x + 45 {
                                                     let next_col = match app.sort_column {
                                                         Column::Pid => Column::Name,
-                                                        Column::Name => Column::Up,
+                                                        Column::Name => Column::Context,
+                                                        Column::Context => Column::Up,
                                                         Column::Up => Column::Down,
                                                         Column::Down => Column::Total,
                                                         Column::Total => Column::Pid,
@@ -681,10 +688,11 @@ async fn main() -> Result<(), anyhow::Error> {
             // Update stats
             for result in stats_map.iter() {
                 if let Ok((pid, stats)) = result {
-                    let name = resolver.get_process_name(pid);
+                    let info = resolver.get_process_info(pid);
                     let hist = app.process_history.entry(pid).or_insert(ProcessRow {
                         pid,
-                        name: name.clone(),
+                        name: info.name.clone(),
+                        context: info.context.clone(),
                         up_bytes: 0,
                         down_bytes: 0,
                         total_bytes: 0,
@@ -692,8 +700,12 @@ async fn main() -> Result<(), anyhow::Error> {
                         last_down_bytes: 0,
                     });
 
-                    if hist.name == "unknown" && name != "unknown" {
-                        hist.name = name;
+                    if hist.name == "unknown" && info.name != "unknown" {
+                        hist.name = info.name;
+                    }
+                    
+                    if hist.context == crate::process::ProcessContext::Unknown && info.context != crate::process::ProcessContext::Unknown {
+                        hist.context = info.context;
                     }
 
                     let up_delta = stats.bytes_sent.saturating_sub(hist.last_up_bytes);
@@ -823,13 +835,19 @@ async fn main() -> Result<(), anyhow::Error> {
 
             if app.historical_view_mode {
                 for row in &app.historical_data {
-                    if app.filter_text.is_empty() || row.name.to_lowercase().contains(&filter_lower) {
+                    if app.filter_text.is_empty() 
+                        || row.name.to_lowercase().contains(&filter_lower)
+                        || row.context.label().to_lowercase().contains(&filter_lower) 
+                    {
                         app.process_data.push(row.clone());
                     }
                 }
             } else {
                 for row in app.process_history.values() {
-                    if app.filter_text.is_empty() || row.name.to_lowercase().contains(&filter_lower) {
+                    if app.filter_text.is_empty() 
+                        || row.name.to_lowercase().contains(&filter_lower)
+                        || row.context.label().to_lowercase().contains(&filter_lower)
+                    {
                         app.process_data.push(row.clone());
                     }
                 }

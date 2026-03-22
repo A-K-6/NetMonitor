@@ -76,6 +76,7 @@ impl DbManager {
             Ok((pid, ProcessRow {
                 pid,
                 name,
+                context: crate::process::ProcessContext::Unknown,
                 up_bytes: total_up, 
                 down_bytes: total_down,
                 total_bytes: total_up + total_down,
@@ -146,6 +147,7 @@ impl DbManager {
             Ok((pid, ProcessRow {
                 pid,
                 name,
+                context: crate::process::ProcessContext::Unknown,
                 up_bytes: 0, // Reset for current session
                 down_bytes: 0,
                 total_bytes: total_up + total_down,

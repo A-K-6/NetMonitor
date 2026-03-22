@@ -35,6 +35,7 @@ The userspace application runs a main loop with three primary responsibilities:
 1.  **Poll BPF Maps:** Fetch latest bandwidth stats and active connections from the kernel.
 2.  **Resolve PIDs:** Query `/proc/[pid]/comm` (or `/proc/[pid]/cmdline`) to get the application name.
 3.  **Resolve Metadata:**
+    - **Service Context:** Parse `/proc/[pid]/cgroup` to identify if the process is part of a **Systemd Service**, **Docker Container**, or **Kubernetes Pod**. This provides infrastructure-level visibility (toggle with `c`).
     - Perform asynchronous **Reverse DNS** lookups for destination IPs.
     - Apply **Protocol Heuristics** based on destination ports (e.g., 443 -> HTTPS).
     - Map IPs to geographical locations using the **Geo-IP** database.
@@ -50,7 +51,7 @@ The UI is divided into three functional areas:
 ### 3.2. Main Content (Process Table)
 A sortable table with columns for:
 - **PID:** Process identifier.
-- **NAME:** Human-readable application name.
+- **NAME / CONTEXT:** Application name or service context (toggle with `c`).
 - **UP (KB/s):** Real-time upload speed.
 - **DOWN (KB/s):** Real-time download speed.
 - **TOTAL:** Cumulative data transferred.
@@ -70,8 +71,9 @@ A full-screen interactive view (toggle with `g`) for the selected process:
 - `q`: Quit.
 - `k`: Kill selected process (requires user confirmation).
 - `s`: Change sorting column.
+- `c`: Toggle "NAME" column between binary name and service context.
 - `t`: Theme Selector (Select color schemes).
-- `/`: Search/Filter processes by name.
+- `/`: Search/Filter processes by name or context.
 - `g`: Toggle Graph View for selected process.
 - `Enter`: Toggle "Connection Deep-Dive" detail view for selected process.
 - `?`: Toggle help screen.

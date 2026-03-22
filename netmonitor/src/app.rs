@@ -2,6 +2,7 @@ use ratatui::widgets::{TableState, ListState};
 use std::collections::{HashMap, VecDeque, HashSet};
 use crate::theme::{Theme, ThemeType};
 use crate::config::Config;
+use crate::process::ProcessContext;
 use dark_light::Mode;
 
 pub const MAX_HISTORY: usize = 100;
@@ -10,6 +11,7 @@ pub const MAX_HISTORY: usize = 100;
 pub enum Column {
     Pid,
     Name,
+    Context,
     Up,
     Down,
     Total,
@@ -19,6 +21,7 @@ pub enum Column {
 pub struct ProcessRow {
     pub pid: u32,
     pub name: String,
+    pub context: ProcessContext,
     pub up_bytes: u64,
     pub down_bytes: u64,
     pub total_bytes: u64,
@@ -138,6 +141,7 @@ pub struct App {
     pub show_threshold_dialog: bool,
     pub show_alerts: bool,
     pub show_theme_dialog: bool,
+    pub show_context: bool,
     pub theme_state: ListState,
     pub current_theme: Theme,
     pub current_theme_type: ThemeType,
@@ -211,6 +215,7 @@ impl App {
             show_threshold_dialog: false,
             show_alerts: false,
             show_theme_dialog: false,
+            show_context: false,
             theme_state,
             current_theme,
             current_theme_type,
@@ -368,6 +373,7 @@ impl App {
             let ordering = match self.sort_column {
                 Column::Pid => a.pid.cmp(&b.pid),
                 Column::Name => a.name.cmp(&b.name),
+                Column::Context => a.context.label().cmp(&b.context.label()),
                 Column::Up => a.up_bytes.cmp(&b.up_bytes),
                 Column::Down => a.down_bytes.cmp(&b.down_bytes),
                 Column::Total => a.total_bytes.cmp(&b.total_bytes),

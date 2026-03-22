@@ -1,3 +1,10 @@
+2026-03-22 14:15 - Completed Task 026: Container & Service Context Resolution.
+- Implemented cgroup v2 path parser in `process.rs` to resolve systemd services, Docker containers, and Kubernetes pods.
+- Added `ProcessContext` enum and updated `ProcessResolver` to cache metadata.
+- Enhanced TUI with a "Context" view toggle (key 'c') in the process table.
+- Updated sorting and filtering to handle context-aware metadata.
+- Verified resolution for system services and added unit tests for `ProcessResolver`.
+
 2026-03-22 12:30 - Completed Task 025: Persistent Configuration System.
 - Implemented a robust TOML-based configuration system using `serde` and `toml` crates.
 - Adhered to XDG Base Directory Specification for config file location via `directories` crate.
