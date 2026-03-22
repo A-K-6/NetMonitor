@@ -1,6 +1,7 @@
 use ratatui::widgets::{TableState, ListState};
 use std::collections::{HashMap, VecDeque, HashSet};
 use crate::theme::{Theme, ThemeType};
+use crate::config::Config;
 use dark_light::Mode;
 
 pub const MAX_HISTORY: usize = 100;
@@ -163,25 +164,39 @@ pub struct App {
     // Dashboard data
     pub protocol_stats: HashMap<u32, (u64, u64)>, // Proto -> (Up, Down)
     pub country_stats: HashMap<String, (u64, u64)>, // Country -> (Up, Down)
+    pub config: Config,
 }
 
 impl App {
-    pub fn new(historical_data: HashMap<u32, ProcessRow>) -> Self {
+    pub fn new(historical_data: HashMap<u32, ProcessRow>, config: Config) -> Self {
         let mut theme_state = ListState::default();
-        theme_state.select(Some(0)); // Auto is index 0
+        let themes = ThemeType::all();
+        let theme_idx = themes.iter().position(|t| *t == config.ui.theme).unwrap_or(0);
+        theme_state.select(Some(theme_idx));
 
         let mut historical_range_state = ListState::default();
         historical_range_state.select(Some(0));
 
-        let current_theme_type = ThemeType::Auto;
-        let current_theme = match dark_light::detect() {
-            Mode::Dark => Theme::from_type(ThemeType::Default),
-            Mode::Light => Theme::from_type(ThemeType::Terminal),
-            Mode::Default => Theme::from_type(ThemeType::Default),
+        let current_theme_type = config.ui.theme;
+        let current_theme = if current_theme_type == ThemeType::Auto {
+            match dark_light::detect() {
+                Mode::Dark => Theme::from_type(ThemeType::Default),
+                Mode::Light => Theme::from_type(ThemeType::Terminal),
+                Mode::Default => Theme::from_type(ThemeType::Default),
+            }
+        } else {
+            Theme::from_type(current_theme_type)
+        };
+
+        let view_mode = match config.ui.default_view.as_str() {
+            "Dashboard" => ViewMode::Dashboard,
+            "ProcessTable" | "Table" => ViewMode::ProcessTable,
+            "Alerts" => ViewMode::Alerts,
+            _ => ViewMode::Dashboard,
         };
 
         Self {
-            view_mode: ViewMode::Dashboard,
+            view_mode,
             process_data: Vec::new(),
             total_upload: 0,
             total_download: 0,
@@ -191,7 +206,7 @@ impl App {
             is_running: true,
             show_kill_dialog: false,
             show_detail: false,
-            show_graph: false,
+            show_graph: config.ui.show_graph,
             show_help: false,
             show_threshold_dialog: false,
             show_alerts: false,
@@ -200,7 +215,7 @@ impl App {
             current_theme,
             current_theme_type,
             threshold_input: String::new(),
-            thresholds: HashMap::new(),
+            thresholds: HashMap::new(), // Per-process thresholds could be loaded here too
             alerts: VecDeque::with_capacity(MAX_HISTORY),
             graph_time_range: TimeRange::TenMinutes,
             graph_series: Vec::new(),
@@ -221,6 +236,7 @@ impl App {
             historical_data: Vec::new(),
             protocol_stats: HashMap::new(),
             country_stats: HashMap::new(),
+            config,
         }
     }
 
@@ -287,6 +303,7 @@ impl App {
             let themes = ThemeType::all();
             if let Some(t_type) = themes.get(i) {
                 self.current_theme_type = *t_type;
+                self.config.ui.theme = *t_type;
                 if *t_type == ThemeType::Auto {
                     self.current_theme = match dark_light::detect() {
                         Mode::Dark => Theme::from_type(ThemeType::Default),

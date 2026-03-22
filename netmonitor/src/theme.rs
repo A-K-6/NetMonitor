@@ -1,6 +1,7 @@
+use serde::{Serialize, Deserialize};
 use ratatui::style::Color;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ThemeType {
     Auto,
     Terminal,

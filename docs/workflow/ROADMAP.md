@@ -43,7 +43,7 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
     - [x] **Tabbed Navigation:** Implement a tabbed interface to seamlessly switch between "Global Dashboard", "Process Monitor", and "Alerts".
     - [x] **Graph UI Overhaul:** Enhanced visualization with better axes, legends, and multi-process overlay support with logarithmic scaling.
     - [x] **Adaptive Theming:** Support for terminal default colors (transparency/ANSI) and system-wide theme detection.
-- [ ] **Persistent Configuration:** Implement `~/.config/netmonitor/config.toml` for saving user preferences and thresholds.
+- [x] **Persistent Configuration:** Implement `~/.config/netmonitor/config.toml` for saving user preferences and thresholds.
 - [ ] **Container & Service Context:** Resolve and display systemd service, Docker container, and K8s pod names for PIDs.
 - [ ] **Active Traffic Shaping:** "Throttling" process bandwidth directly from the TUI using `tc` or `cgroups`.
 - [ ] **Phase 3 Final Review:** A comprehensive, project-wide code review and refactor session to ensure stability before Phase 4.

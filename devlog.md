@@ -1,3 +1,11 @@
+2026-03-22 12:30 - Completed Task 025: Persistent Configuration System.
+- Implemented a robust TOML-based configuration system using `serde` and `toml` crates.
+- Adhered to XDG Base Directory Specification for config file location via `directories` crate.
+- Added CLI support for custom config paths using `clap`.
+- Decoupled UI settings (theme, refresh rate, default view) and network settings (DNS, Geo-IP) into the configuration file.
+- Integrated name-based bandwidth thresholds into the alert system.
+- Verified compilation and added status messages for config loading in the TUI.
+
 2026-03-22 11:10 - Corrected Roadmap and Restored Feature Goals.
 - Restored "Container & Service Context", "Active Traffic Shaping", and "Headless Data Exporting" to the Roadmap as high-level goals.
 - Removed all Task IDs/numbers from the Roadmap to maintain a clean, goal-oriented view.

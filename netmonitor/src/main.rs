@@ -7,8 +7,12 @@ mod geoip;
 mod protocol;
 mod dns;
 mod db;
+mod config;
 
 use app::{App, Column, ProcessRow, TimeRange, HistoricalRange};
+use config::Config;
+use clap::Parser;
+use std::path::PathBuf;
 use aya::maps::HashMap;
 use aya::programs::KProbe;
 use aya::Ebpf;
@@ -24,6 +28,14 @@ use log::{error, info};
 use db::DbManager;
 use chrono::Utc;
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to configuration file
+    #[arg(short, long)]
+    config: Option<PathBuf>,
+}
+
 fn check_caps() -> Result<(), anyhow::Error> {
     let required = [Capability::CAP_BPF, Capability::CAP_NET_ADMIN];
     for &cap in &required {
@@ -37,6 +49,9 @@ fn check_caps() -> Result<(), anyhow::Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let args = Args::parse();
+    let (config, config_path) = Config::load(args.config);
+
     // Check capabilities before loading
     if let Err(e) = check_caps() {
         return Err(e);
@@ -95,11 +110,19 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut resolver = ProcessResolver::new(Duration::from_secs(10));
     let mut terminal = tui::Tui::new()?;
-    let mut app = App::new(historical_data);
+    let mut app = App::new(historical_data, config);
+
+    if let Some(path) = &config_path {
+        if path.exists() {
+            app.status_message = Some(format!("Loaded config from {}", path.display()));
+        } else {
+            app.status_message = Some(format!("Created new config at {}", path.display()));
+        }
+    }
 
     let mut last_tick = Instant::now();
     let mut last_db_flush = Instant::now();
-    let tick_rate = Duration::from_millis(1000);
+    let tick_rate = Duration::from_millis(app.config.ui.refresh_rate);
     let db_flush_rate = Duration::from_secs(60);
 
     // Track deltas for DB flushing
@@ -692,22 +715,24 @@ async fn main() -> Result<(), anyhow::Error> {
                     entry.1 += down_delta;
 
                     // Alert check
-                    if let Some(&threshold) = app.thresholds.get(&pid) {
-                        let current_rate = (up_delta + down_delta) / 1024; // KB/s (assuming 1Hz)
-                        if current_rate > threshold {
-                            let alert = app::Alert {
-                                timestamp: Utc::now(),
-                                pid,
-                                process_name: hist.name.clone(),
-                                value: current_rate,
-                                threshold,
-                            };
-                            app.alerts.push_back(alert);
-                            if app.alerts.len() > app::MAX_HISTORY {
-                                app.alerts.pop_front();
-                            }
-                            app.status_message = Some(format!("ALERT: {} exceeded threshold!", hist.name));
+                    let threshold = app.thresholds.get(&pid).cloned()
+                        .or_else(|| app.config.alerts.processes.get(&hist.name).cloned())
+                        .unwrap_or(app.config.alerts.default_threshold);
+
+                    let current_rate = (up_delta + down_delta) / 1024; // KB/s (assuming 1Hz)
+                    if current_rate > threshold && threshold > 0 {
+                        let alert = app::Alert {
+                            timestamp: Utc::now(),
+                            pid,
+                            process_name: hist.name.clone(),
+                            value: current_rate,
+                            threshold,
+                        };
+                        app.alerts.push_back(alert);
+                        if app.alerts.len() > app::MAX_HISTORY {
+                            app.alerts.pop_front();
                         }
+                        app.status_message = Some(format!("ALERT: {} exceeded threshold!", hist.name));
                     }
                 }
             }
@@ -742,7 +767,11 @@ async fn main() -> Result<(), anyhow::Error> {
                         let dst_ip_addr = IpAddr::V4(dst_addr);
                         let dst_ip = dst_addr.to_string();
                         
-                        let (country, isp) = geoip::RESOLVER.resolve(dst_ip_addr);
+                        let (country, isp) = if app.config.network.geo_ip_enabled {
+                            geoip::RESOLVER.resolve(dst_ip_addr)
+                        } else {
+                            ("Disabled".to_string(), "Disabled".to_string())
+                        };
                         let service = protocol::RESOLVER.resolve(key.proto, key.dst_port);
                         
                         // Aggregate protocol/country stats
@@ -755,15 +784,19 @@ async fn main() -> Result<(), anyhow::Error> {
                         c_stats.1 += stats.bytes_recv;
 
                         // Get cached hostname or trigger resolution
-                        let hostname = match dns::RESOLVER.get_cached(dst_ip_addr) {
-                            Some(h) => h,
-                            None => {
-                                // Spawn background resolution if not in cache
-                                tokio::spawn(async move {
-                                    dns::RESOLVER.resolve(dst_ip_addr).await;
-                                });
-                                None
+                        let hostname = if app.config.network.dns_resolution {
+                            match dns::RESOLVER.get_cached(dst_ip_addr) {
+                                Some(h) => h,
+                                None => {
+                                    // Spawn background resolution if not in cache
+                                    tokio::spawn(async move {
+                                        dns::RESOLVER.resolve(dst_ip_addr).await;
+                                    });
+                                    None
+                                }
                             }
+                        } else {
+                            None
                         };
 
                         let conn_info = app::ConnectionInfo {
@@ -838,6 +871,15 @@ async fn main() -> Result<(), anyhow::Error> {
             error!("Final DB flush failed: {}", e);
         } else {
             info!("Final DB flush completed");
+        }
+    }
+
+    // Save config on exit
+    if let Some(path) = config_path {
+        if let Err(e) = app.config.save(&path) {
+            error!("Failed to save config: {}", e);
+        } else {
+            info!("Config saved to {}", path.display());
         }
     }
 
