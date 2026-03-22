@@ -44,29 +44,43 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
     - [x] **Graph UI Overhaul:** Enhanced visualization with better axes, legends, and multi-process overlay support with logarithmic scaling.
     - [x] **Adaptive Theming:** Support for terminal default colors (transparency/ANSI) and system-wide theme detection.
 - [x] **Persistent Configuration:** Implement `~/.config/netmonitor/config.toml` for saving user preferences and thresholds.
-- [ ] **Container & Service Context:** Resolve and display systemd service, Docker container, and K8s pod names for PIDs.
+- [x] **Container & Service Context:** Resolve and display systemd service, Docker container, and K8s pod names for PIDs.
 - [ ] **Active Traffic Shaping:** "Throttling" process bandwidth directly from the TUI using `tc` or `cgroups`.
 - [ ] **Writing the ReadMe:** Comprehensive documentation of new features, configuration, and advanced usage.
 - [ ] **Phase 3 Final Review:** A comprehensive, project-wide code review and refactor session to ensure stability before Phase 4.
 
-## Phase 4: Stability & Documentation
-*Goal: Professional-grade packaging and rigorous documentation.*
+## Phase 4: Stability & Testing
+*Goal: Professional-grade reliability and automated verification.*
+- [ ] **Automated Testing Suite:** 
+    - [ ] Implement unit tests for userspace logic (Resolver, Config, TUI state).
+    - [ ] Implement eBPF integration tests (using `aya-test` or similar).
+- [ ] **CI/CD Pipeline:** Setup GitHub Actions for automated linting (`clippy`), formatting (`fmt`), and cross-platform testing.
 - [ ] **Headless Data Exporting:** Implement `--json` and `--csv` output modes for scripting/automation.
 - [ ] **Performance Audit:** Verify CPU usage remains <1% under heavy network load.
 - [ ] **CO-RE Validation:** Test the binary on multiple kernel versions (BTF support).
 - [ ] **Headless Mode:** Implement a mode for JSON/CSV output or Prometheus exporting.
-- [ ] **Comprehensive Documentation:** 
-    - [ ] Finalize user manuals and usage examples.
-    - [ ] Generate API/Kernel specifications.
-    - [ ] Create a compelling `README.md` with screenshots/GIFs of the TUI.
+- [ ] **Documentation Expansion:**
+    - [ ] Create initial `man` pages for terminal-based help.
+    - [ ] Generate API/Kernel technical specifications.
 - [ ] **Background Mode:** Implement `netmonitord` (Systemd service) for continuous logging.
-- [ ] **TUI Complete Refinement:** 
-    - [ ] Final UX polish, accessibility audit, and performance optimization of the rendering pipeline.
 
-## Phase 5: Release & Distribution
-*Goal: Getting NetMonitor into the hands of users.*
+## Phase 5: Release & Distribution (v0.1.0)
+*Goal: Getting NetMonitor into the hands of users with professional packaging.*
+- [ ] **Community Feedback Loop:** Establish a Beta/Release Candidate (RC) phase for real-world user feedback.
 - [ ] **Packaging:** 
     - [ ] Create `.deb` package via `cargo-deb`.
     - [ ] Create AUR (Arch User Repository) PKGBUILD.
     - [ ] Provide static binaries for Linux via GitHub Actions.
-- [ ] **Initial Release (v0.1.0):** Tag the first stable release and publish it to GitHub and potentially `crates.io`.
+- [ ] **Initial Release (v0.1.0):** Tag the first stable release and publish it to GitHub and `crates.io`.
+- [ ] **User Manual:** Finalize a compelling `README.md` with high-quality GIFs and usage examples.
+
+## Phase 6: Hardening & Ecosystem
+*Goal: Long-term sustainability, security, and contribution growth.*
+- [ ] **Security Audit:** Detailed review of eBPF capability usage and memory safety in userspace.
+- [ ] **Graceful Degradation:** Implement fallback logic for legacy kernels or missing system dependencies (e.g., GeoIP DB).
+- [ ] **Least Privilege Hardening:** Ensure the application runs with the absolute minimum required Linux capabilities.
+- [ ] **Advanced Traffic Control:** Expand "Traffic Shaping" with more granular rules and `cgroup` v1 support if required.
+- [ ] **Open Source Readiness:** 
+    - [ ] Draft `CONTRIBUTING.md` to guide future community contributors.
+    - [ ] Establish a public issue-tracking and feature-request process.
+- [ ] **Maintenance Strategy:** Define the release cycle and LTS (Long Term Support) goals for future versions.

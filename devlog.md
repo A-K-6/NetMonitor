@@ -1,3 +1,10 @@
+2026-03-22 15:30 - Strategic Roadmap Expansion for v0.1.0 and Production Hardening.
+- Expanded `ROADMAP.md` with detailed Phase 4 (Stability & Testing) and Phase 5 (Release v0.1.0).
+- Introduced **Phase 6: Hardening & Ecosystem** to address security audits, least privilege, and long-term maintainability.
+- Integrated automated testing (unit/integration) and CI/CD pipelines into the core development flow.
+- Deferred `CONTRIBUTING.md` and community growth tasks to Phase 6 to prioritize immediate release goals.
+- Verified alignment between `PRD.md` and the updated multi-phase roadmap.
+
 2026-03-22 14:15 - Completed Task 026: Container & Service Context Resolution.
 - Implemented cgroup v2 path parser in `process.rs` to resolve systemd services, Docker containers, and Kubernetes pods.
 - Added `ProcessContext` enum and updated `ProcessResolver` to cache metadata.
