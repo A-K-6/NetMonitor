@@ -1,39 +1,63 @@
-# Idea: Phase 3 Final Review & Stability Refactor
+# Idea: Phase 3 Professional Review & Architectural Refactor
 
 **Status:** Proposed
 **Phase:** 3 (Advanced/Transition)
-**Objective:** Conduct a comprehensive, project-wide code review and refactor session to consolidate Phase 3 features (Throttling, Geo-IP, DNS, Persistence) and ensure architectural stability before moving into Phase 4 (Stability & Testing).
+**Objective:** Transform the current MVP-style codebase into a professional-grade, modular architecture. This multi-step refactor focuses on decoupling the kernel-space interaction, business logic, and TUI, ensuring the project is sustainable, testable, and strictly adheres to Rust best practices.
 
-## 1. Research & Strategy
-- **Consolidation:** Phase 3 added significant complexity (SQLite, eBPF Cgroup hooks, Async DNS). We need to ensure these components are cleanly decoupled and share a consistent error-handling strategy.
-- **Performance Audit:** 
-    - Profile the user-space main loop to ensure 1Hz+ refresh doesn't spike CPU on systems with 1000+ active connections.
-    - Review eBPF map access patterns (LRU for connections, Hash for stats).
-- **Security & Least Privilege:** 
-    - Finalize the capability-only execution path (`setcap`).
-    - Audit `unsafe` blocks in Rust (especially where interacting with eBPF maps and libc).
-- **Testing Infrastructure:** Define the base traits for mocking eBPF data and database interactions to enable Phase 4 unit testing.
+## 1. Research & Strategy (The Vision)
+- **Architectural Boundary:** Establish a "Clean Architecture" approach where the TUI is merely a consumer of a "Monitoring Service."
+- **Infrastructure First:** Build a robust abstraction layer for eBPF maps to allow for future backend swaps.
+- **Concurrency & Safety:** Move toward a clear ownership model using channels and safe state-update protocols.
+- **Idiomatic Rust:** Leverage the type system to make illegal states unrepresentable (Type-Driven Design).
 
-## 2. Technical Specification
-- **Modularization:** Move eBPF map management into a dedicated `BpfManager` or `KernelCollector` struct to isolate `aya` dependencies.
-- **Error Handling:** Replace remaining `unwrap()` calls with proper `anyhow` or `thiserror` patterns.
-- **TUI State:** Refactor `App` into sub-components (e.g., `Navigation`, `MonitoringState`, `AlertManager`) to reduce the "God Object" anti-pattern in `app.rs`.
+---
+
+## 2. Technical Specification: The Multi-Step Process
+
+### Step 1: Core Decoupling (The Kernel Bridge)
+- **Goal:** Isolate `aya` and BPF map management.
+- **Action:** Create a `KernelCollector` trait and a default `AyaCollector` implementation.
+- **Rust Practice:** Use `async-trait` or standard traits with `Result` types for clean error propagation.
+
+### Step 2: State Management Refactor (Domain Model)
+- **Goal:** Solve the "God Object" anti-pattern in `app.rs`.
+- **Action:** Split `App` into focused Domain Services (`TrafficService`, `IdentityService`, `EnforcementService`).
+- **Rust Practice:** Use the **Newtype pattern** for PIDs and Bytes to prevent logic errors (e.g., `Pid(u32)`).
+
+### Step 3: Observability & Idiomatic Hardening
+- **Goal:** "Professional" code quality and resilience.
+- **Action:** 
+    - Standardize error handling with `thiserror` and `anyhow`.
+    - **Linting:** Enforce `deny(clippy::all)` and `deny(clippy::pedantic)` in critical modules.
+    - **Documentation:** Ensure all public APIs are documented with `///` for `rustdoc`.
+- **Impact:** Code that feels "native" to senior Rust developers and is easy to maintain.
+
+### Step 4: Testing & Mocking Framework
+- **Goal:** Zero-dependency automated testing.
+- **Action:** 
+    - Implement a `MockCollector` for non-root testing.
+    - **Formatting:** Ensure project-wide `cargo fmt` compliance.
+    - **CI Integration:** Create a `test.sh` script to verify build, clippy, and tests in one pass.
+
+---
 
 ## 3. Implementation Plan
-- [ ] **Architecture Audit:**
-    - [ ] Refactor `main.rs` to move eBPF loading/attaching into a separate module.
-    - [ ] Clean up `app.rs` by moving dialog and navigation logic into smaller, testable units.
-- [ ] **Performance & Resource Management:**
-    - [ ] Optimize the SQLite flush frequency and batching logic.
-    - [ ] Ensure all background tasks (DNS, Geo-IP) are properly handled via `tokio` join handles or similar.
-- [ ] **Dependency & Safety Review:**
-    - [ ] Audit all `unsafe` blocks for memory safety and documented invariants.
-    - [ ] Update all dependencies in `Cargo.toml` to their latest stable versions.
-- [ ] **Preparation for Testing:**
-    - [ ] Define traits for the `DbManager` and `ProcessResolver` to allow for easy mocking.
-    - [ ] Create a "Dummy eBPF" mode for testing the TUI without requiring root/eBPF capabilities.
+
+- [ ] **Step 1: Kernel Abstraction**
+    - [ ] Define `Collector` trait in a new `core` module.
+    - [ ] Move map-polling logic into `AyaCollector`.
+- [ ] **Step 2: Service Layer Extraction**
+    - [ ] Extract `ProcessResolver` and `DbManager` behind traits.
+    - [ ] Implement **Type-Driven** updates (e.g., using a `State` enum for UI).
+- [ ] **Step 3: Quality & Safety Audit**
+    - [ ] Audit and remove all `unwrap()`/`expect()`.
+    - [ ] Run `cargo clippy -- -D warnings` and fix all violations.
+    - [ ] Add doc-comments to all core modules.
+- [ ] **Step 4: Infrastructure Validation**
+    - [ ] Verify TUI boots via `MockCollector`.
+    - [ ] Enforce `cargo fmt` across the workspace.
 
 ## 4. Verification & Testing
-- **Resource Monitoring:** Use `top`/`htop` and `valgrind` (if applicable) to monitor memory and CPU usage under heavy network load.
-- **Binary Size:** Check the impact of embedded bytecode and bundled resources (GeoIP DB) on the final binary size.
-- **Binary Portability:** Test the release binary on different kernel versions (CO-RE verification).
+- **Refactor Integrity:** No regression in bandwidth accuracy.
+- **Code Quality:** Zero `clippy` warnings and 100% `cargo fmt` compliance.
+- **Architecture Validation:** TUI is fully decoupled from `aya`.
