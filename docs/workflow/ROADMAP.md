@@ -46,6 +46,7 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Persistent Configuration:** Implement `~/.config/netmonitor/config.toml` for saving user preferences and thresholds.
 - [ ] **Container & Service Context:** Resolve and display systemd service, Docker container, and K8s pod names for PIDs.
 - [ ] **Active Traffic Shaping:** "Throttling" process bandwidth directly from the TUI using `tc` or `cgroups`.
+- [ ] **Writing the ReadMe:** Comprehensive documentation of new features, configuration, and advanced usage.
 - [ ] **Phase 3 Final Review:** A comprehensive, project-wide code review and refactor session to ensure stability before Phase 4.
 
 ## Phase 4: Stability & Documentation
