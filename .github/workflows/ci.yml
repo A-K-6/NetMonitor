@@ -34,10 +34,7 @@ jobs:
 
       - name: Run Fast Checks (Push)
         if: github.event_name == 'push'
-        run: |
-          cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test --workspace
+        run: cargo xtask check
 
       - name: Run Full Verification (Pull Request)
         if: github.event_name == 'pull_request'

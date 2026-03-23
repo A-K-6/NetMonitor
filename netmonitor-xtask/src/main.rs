@@ -25,6 +25,8 @@ enum Commands {
     },
     /// Run all local verifications (pre-flight)
     Verify,
+    /// Fast check: Linting and Unit Tests (No accuracy script)
+    Check,
     /// Install the daemon and systemd service (requires sudo)
     Install,
 }
@@ -42,11 +44,42 @@ fn main() -> Result<()> {
         Commands::Verify => {
             verify()?;
         }
+        Commands::Check => {
+            check()?;
+        }
         Commands::Install => {
             install()?;
         }
     }
 
+    Ok(())
+}
+
+fn check() -> Result<()> {
+    println!("--- 0. Building eBPF Bytecode (Required for Linting/Embedding) ---");
+    build_ebpf(true)?;
+
+    println!("--- 1. Linting (fmt & clippy) ---");
+    let status = Command::new("cargo").args(["fmt", "--check"]).status()?;
+    if !status.success() {
+        return Err(anyhow!("fmt check failed"));
+    }
+    let status = Command::new("cargo")
+        .args(["clippy", "--all-targets", "--", "-D", "warnings"])
+        .status()?;
+    if !status.success() {
+        return Err(anyhow!("clippy failed"));
+    }
+
+    println!("--- 2. Unit Tests (Userspace & eBPF Logic) ---");
+    let status = Command::new("cargo")
+        .args(["test", "--workspace"])
+        .status()?;
+    if !status.success() {
+        return Err(anyhow!("unit tests failed"));
+    }
+
+    println!("Check PASSED.");
     Ok(())
 }
 
