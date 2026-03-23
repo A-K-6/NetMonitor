@@ -1,0 +1,33 @@
+#!/bin/sh
+set -e
+
+USER_NAME="netmonitor"
+GROUP_NAME="netmonitor"
+
+case "$1" in
+    purge)
+        # 1. Remove user and group if they exist
+        if getent passwd "$USER_NAME" >/dev/null; then
+            userdel "$USER_NAME"
+        fi
+        if getent group "$GROUP_NAME" >/dev/null; then
+            groupdel "$GROUP_NAME"
+        fi
+
+        # 2. Cleanup directories (Optional, might be destructive for data)
+        # Often better to leave it or ask user, but for purge we can clean it.
+        rm -rf /var/lib/netmonitor /var/log/netmonitor /run/netmonitor
+    ;;
+
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    ;;
+
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

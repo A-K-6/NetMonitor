@@ -75,7 +75,7 @@ impl Formatter for PlainFormatter {
         )?;
 
         let mut sorted_procs = snapshot.processes.clone();
-        sorted_procs.sort_by(|a, b| (b.up_rate.0 + b.down_rate.0).cmp(&(a.up_rate.0 + a.down_rate.0)));
+        sorted_procs.sort_by_key(|b| std::cmp::Reverse(b.up_rate.0 + b.down_rate.0));
 
         for proc in sorted_procs.iter().take(20) {
             if proc.up_rate.0 > 0 || proc.down_rate.0 > 0 {

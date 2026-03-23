@@ -35,3 +35,16 @@ directories = "5.0"
 
 [dev-dependencies]
 proptest = "1.0"
+
+[package.metadata.deb]
+maintainer = "Aeen <your-email@example.com>"
+copyright = "2026, Aeen <your-email@example.com>"
+license-file = ["../LICENSE", "0"]
+depends = "$auto, libcap2-bin"
+section = "net"
+priority = "optional"
+assets = [
+    ["target/release/netmonitor", "usr/bin/netmonitor", "755"],
+    ["resources/netmonitor.service", "lib/systemd/system/netmonitor.service", "644"],
+]
+maintainer-scripts = "debian/"

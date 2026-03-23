@@ -1,0 +1,55 @@
+#!/bin/sh
+set -e
+
+# Define variables
+USER_NAME="netmonitor"
+GROUP_NAME="netmonitor"
+LIB_DIR="/var/lib/netmonitor"
+LOG_DIR="/var/log/netmonitor"
+RUN_DIR="/run/netmonitor"
+BIN_PATH="/usr/bin/netmonitor"
+
+case "$1" in
+    configure)
+        # 1. Create system group if not exists
+        if ! getent group "$GROUP_NAME" >/dev/null; then
+            groupadd --system "$GROUP_NAME"
+        fi
+
+        # 2. Create system user if not exists
+        if ! getent passwd "$USER_NAME" >/dev/null; then
+            useradd --system \
+                --gid "$GROUP_NAME" \
+                --home-dir "$LIB_DIR" \
+                --shell /usr/sbin/nologin \
+                --comment "NetMonitor Service Account" \
+                "$USER_NAME"
+        fi
+
+        # 3. Provision directories
+        for dir in "$LIB_DIR" "$LOG_DIR" "$RUN_DIR"; do
+            mkdir -p "$dir"
+            chown "$USER_NAME:$GROUP_NAME" "$dir"
+            chmod 750 "$dir"
+        done
+
+        # 4. Set capabilities
+        if command -v setcap >/dev/null; then
+            setcap 'cap_net_admin,cap_bpf=ep' "$BIN_PATH"
+        else
+            echo "Warning: setcap not found, NetMonitor might require root privileges."
+        fi
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

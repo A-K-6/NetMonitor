@@ -62,33 +62,67 @@ fn install() -> Result<()> {
 
     println!("--- 2. Creating System User & Group ---");
     // Create group if not exists
-    let _ = Command::new("sudo").args(["groupadd", "-r", "netmonitor"]).status();
+    let _ = Command::new("sudo")
+        .args(["groupadd", "-r", "netmonitor"])
+        .status();
     // Create user if not exists
     let _ = Command::new("sudo")
-        .args(["useradd", "-r", "-g", "netmonitor", "-d", "/var/lib/netmonitor", "-s", "/usr/sbin/nologin", "netmonitor"])
+        .args([
+            "useradd",
+            "-r",
+            "-g",
+            "netmonitor",
+            "-d",
+            "/var/lib/netmonitor",
+            "-s",
+            "/usr/sbin/nologin",
+            "netmonitor",
+        ])
         .status();
 
     println!("--- 3. Provisioning Directories ---");
-    let dirs = ["/var/lib/netmonitor", "/var/log/netmonitor", "/run/netmonitor"];
+    let dirs = [
+        "/var/lib/netmonitor",
+        "/var/log/netmonitor",
+        "/run/netmonitor",
+    ];
     for dir in dirs {
         Command::new("sudo").args(["mkdir", "-p", dir]).status()?;
-        Command::new("sudo").args(["chown", "netmonitor:netmonitor", dir]).status()?;
+        Command::new("sudo")
+            .args(["chown", "netmonitor:netmonitor", dir])
+            .status()?;
     }
 
     println!("--- 4. Installing Binary ---");
     Command::new("sudo")
-        .args(["cp", "target/release/netmonitor", "/usr/local/bin/netmonitor"])
+        .args([
+            "cp",
+            "target/release/netmonitor",
+            "/usr/local/bin/netmonitor",
+        ])
         .status()?;
     Command::new("sudo")
-        .args(["setcap", "cap_net_admin,cap_bpf=ep", "/usr/local/bin/netmonitor"])
+        .args([
+            "setcap",
+            "cap_net_admin,cap_bpf=ep",
+            "/usr/local/bin/netmonitor",
+        ])
         .status()?;
 
     println!("--- 5. Deploying Systemd Service ---");
     Command::new("sudo")
-        .args(["cp", "netmonitor/resources/netmonitor.service", "/etc/systemd/system/netmonitor.service"])
+        .args([
+            "cp",
+            "netmonitor/resources/netmonitor.service",
+            "/etc/systemd/system/netmonitor.service",
+        ])
         .status()?;
-    Command::new("sudo").args(["systemctl", "daemon-reload"]).status()?;
-    Command::new("sudo").args(["systemctl", "enable", "netmonitor"]).status()?;
+    Command::new("sudo")
+        .args(["systemctl", "daemon-reload"])
+        .status()?;
+    Command::new("sudo")
+        .args(["systemctl", "enable", "netmonitor"])
+        .status()?;
 
     println!("--- 6. Installation Complete ---");
     println!("You can now start the service with: sudo systemctl start netmonitor");

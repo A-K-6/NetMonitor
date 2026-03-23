@@ -171,7 +171,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     if args.daemon {
         let mut daemonize = Daemonize::new()
-            .pid_file(args.pid_file.unwrap_or_else(|| PathBuf::from("/run/netmonitor/netmonitor.pid")))
+            .pid_file(
+                args.pid_file
+                    .unwrap_or_else(|| PathBuf::from("/run/netmonitor/netmonitor.pid")),
+            )
             .chown_pid_file(true)
             .working_directory("/tmp");
 
@@ -185,11 +188,14 @@ async fn main() -> Result<(), anyhow::Error> {
             Ok(_) => {
                 info!("NetMonitor daemon started.");
                 let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
-                
+
                 // Signal Handling for Daemon
-                let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-                let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
-                let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
+                let mut sigterm =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+                let mut sigint =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+                let mut sighup =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
 
                 let shutdown_tx_clone = shutdown_tx.clone();
                 tokio::spawn(async move {
@@ -208,12 +214,8 @@ async fn main() -> Result<(), anyhow::Error> {
                     }
                 });
 
-                let mut monitoring_loop = MonitoringLoop::new(
-                    monitoring,
-                    db,
-                    config,
-                    Duration::from_secs(args.interval),
-                );
+                let mut monitoring_loop =
+                    MonitoringLoop::new(monitoring, db, config, Duration::from_secs(args.interval));
 
                 monitoring_loop.run(shutdown_rx, None, args.count).await?;
                 return Ok(());
@@ -252,19 +254,17 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
         tokio::spawn(async move {
-            if let Ok(_) = tokio::signal::ctrl_c().await {
+            if tokio::signal::ctrl_c().await.is_ok() {
                 let _ = shutdown_tx.send(());
             }
         });
 
-        let mut monitoring_loop = MonitoringLoop::new(
-            monitoring,
-            db,
-            config,
-            Duration::from_secs(args.interval),
-        );
+        let mut monitoring_loop =
+            MonitoringLoop::new(monitoring, db, config, Duration::from_secs(args.interval));
 
-        monitoring_loop.run(shutdown_rx, Some((formatter, output_writer)), args.count).await?;
+        monitoring_loop
+            .run(shutdown_rx, Some((formatter, output_writer)), args.count)
+            .await?;
         return Ok(());
     }
 

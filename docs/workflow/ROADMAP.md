@@ -59,8 +59,8 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **CO-RE Validation:** Test the binary on multiple kernel versions (BTF support).
 - [x] **Headless Mode:** Implement a mode for JSON/CSV output or Prometheus exporting.
 - [x] **Background Mode:** Implement `netmonitord` (Systemd service) for continuous logging.
-- [ ] **CI/CD Pipeline:** Setup GitHub Actions for automated linting (`clippy`), formatting (`fmt`), and cross-platform testing.
-- [ ] **Automated Packaging:** Integrate `cargo-deb` to generate `.deb` artifacts in CI.
+- [x] **CI/CD Pipeline:** Setup GitHub Actions for automated linting (`clippy`), formatting (`fmt`), and workspace testing.
+- [x] **Automated Packaging:** Integrate `cargo-deb` to generate `.deb` artifacts in CI/CD and xtask.
 - [ ] **Documentation Expansion:**
     - [ ] Create initial `man` pages for terminal-based help.
     - [ ] Generate API/Kernel technical specifications.

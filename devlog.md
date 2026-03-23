@@ -1,3 +1,12 @@
+2026-03-23 17:30 - Completed Task 034: CI/CD Pipeline & Automated Packaging.
+- Established GitHub Actions workflow (`ci.yml`) for automated linting, clippy, and workspace testing.
+- Integrated `cargo xtask verify` into CI to ensure eBPF/userspace build and accuracy verification on clean environments.
+- Implemented Automated Packaging using `cargo-deb` with metadata in `netmonitor/Cargo.toml`.
+- Created Debian lifecycle scripts (`postinst`, `prerm`, `postrm`) for system user/group management and capability provisioning.
+- Configured Release workflow (`release.yml`) to build and attach `.deb` and binary artifacts to Git tags.
+- Optimized workflows with `Swatinem/rust-cache` for faster builds across runs.
+- Updated `netmonitor.service` to use standard `/usr/bin/netmonitor` binary path for package compatibility.
+
 2026-03-23 16:30 - Completed Task 033: Background Daemon & Systemd Integration.
 - Implemented `--daemon` mode using `daemonize` crate for background execution.
 - Extracted `MonitoringLoop` service to unify Headless and Daemon monitoring logic.
@@ -140,7 +149,7 @@
 - Refactored `App` state to use `GraphSeries` and `HashSet<u32>` for selected PIDs.
 - Verified compilation and updated help overlay with new keybindings (`Space`, `l`).
 
-2026-03-21 16:15 - Updated Roadmap and Proposed Task 023.
+2026-03-21 16:15 - Updated ROADMAP.md and Proposed Task 023.
 - Marked Task 022 (Tabbed Navigation) as complete in `ROADMAP.md`.
 - Proposed Task 023: Graph UI Overhaul (Visual Analytics) in `docs/ideas/todo/023-graph-ui-overhaul.md`.
 - Planned multi-process overlay, dynamic scaling, and legends for the graph view.

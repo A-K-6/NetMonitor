@@ -94,7 +94,10 @@ impl<C: Collector, R: Resolver> MonitoringLoop<C, R> {
         Ok(())
     }
 
-    fn flush_to_db(&mut self, db_deltas: &mut HashMap<u32, (u64, u64)>) -> Result<(), anyhow::Error> {
+    fn flush_to_db(
+        &mut self,
+        db_deltas: &mut HashMap<u32, (u64, u64)>,
+    ) -> Result<(), anyhow::Error> {
         let mut batch = Vec::new();
         for (pid, (up, down)) in db_deltas.drain() {
             if up > 0 || down > 0 {
