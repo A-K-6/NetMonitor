@@ -51,7 +51,7 @@ As the project nears Phase 5 (Release), we need to ensure that:
 5.  **Refine Xtask:** Ensure `cargo xtask build-ebpf` works seamlessly in a non-interactive CI environment.
 
 ## 4. Verification Criteria
-- [ ] PRs show green checkmarks for fmt, clippy, and tests.
-- [ ] Tagging a commit with `v0.x.x` triggers a build that produces a downloadable `.deb`.
-- [ ] The generated `.deb` package successfully installs on a clean Ubuntu/Debian system and starts the service.
-- [ ] The binary inside the `.deb` has the correct `CAP_NET_ADMIN` and `CAP_BPF` capabilities.
+- [x] PRs show green checkmarks for fmt, clippy, and tests.
+- [x] Tagging a commit with `v0.x.x` triggers a build that produces a downloadable `.deb`.
+- [x] The generated `.deb` package successfully installs on a clean Ubuntu/Debian system and starts the service.
+- [x] The binary inside the `.deb` has the correct `CAP_NET_ADMIN` and `CAP_BPF` capabilities.
