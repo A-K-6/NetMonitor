@@ -40,14 +40,12 @@ impl AyaCollector {
         };
         let ret = unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
         if ret != 0 {
-            return Err(anyhow::anyhow!(
-                "Failed to increase rlimit RLIMIT_MEMLOCK: {}",
-                ret
-            ));
+            log::warn!("Failed to increase rlimit RLIMIT_MEMLOCK: {}", ret);
         }
 
-        // Load the BPF program
-        let mut bpf = Ebpf::load_file("target/bpfel-unknown-none/release/netmonitor-ebpf")?;
+        // Load the BPF program (embedded via include_bytes!)
+        let ebpf_bytecode = include_bytes!("../../resources/netmonitor-ebpf").to_vec();
+        let mut bpf = Ebpf::load(&ebpf_bytecode)?;
 
         if let Err(e) = EbpfLogger::init(&mut bpf) {
             log::warn!("failed to initialize eBPF logger: {}", e);

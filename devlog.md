@@ -1,3 +1,15 @@
+2026-03-23 16:30 - Completed Task 033: Background Daemon & Systemd Integration.
+- Implemented `--daemon` mode using `daemonize` crate for background execution.
+- Extracted `MonitoringLoop` service to unify Headless and Daemon monitoring logic.
+- Enabled SQLite WAL (Write-Ahead Logging) in `DbManager` for concurrent TUI/Daemon access.
+- Unified the binary by embedding eBPF bytecode using `include_bytes!`.
+- Fixed ELF parsing errors by using `.to_vec()` to ensure proper alignment for `Ebpf::load`.
+- Implemented robust path resolution for `/var/lib/netmonitor/netmonitor.db` in daemon mode.
+- Added signal handling for `SIGTERM`, `SIGINT` (graceful shutdown) and `SIGHUP` (config reload scaffolding).
+- Created `netmonitor.service` systemd unit with `AmbientCapabilities` (CAP_NET_ADMIN, CAP_BPF, CAP_PERFMON).
+- Added `cargo xtask install` to automate system user creation, directory provisioning, and service deployment.
+- Verified successful background operation and non-blocking TUI queries.
+
 2026-03-23 15:30 - Refined Idea 033: Background Daemon & Systemd Integration.
 - Updated `docs/ideas/todo/033-background-daemon-and-systemd.md` with technical refinements.
 - Added Task D (Database Concurrency) to include SQLite WAL mode for non-blocking TUI queries.

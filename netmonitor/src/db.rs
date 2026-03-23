@@ -17,6 +17,7 @@ impl DbManager {
     }
 
     fn initialize(&self) -> Result<()> {
+        self.conn.pragma_update(None, "journal_mode", "WAL")?;
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS processes (
                 pid INTEGER PRIMARY KEY,

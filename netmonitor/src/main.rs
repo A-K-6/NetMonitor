@@ -16,15 +16,19 @@ use caps::{has_cap, CapSet, Capability};
 use chrono::Utc;
 use clap::Parser;
 use config::Config;
-use core::Collector;
+use core::collector::Collector;
+use core::services::MonitoringLoop;
 use crossterm::event::{Event, KeyCode, MouseButton, MouseEventKind};
+use daemonize::Daemonize;
 use db::DbManager;
 use export::Formatter;
-use log::{error, info};
+use log::{error, info, warn};
 use ratatui::layout::{Direction, Layout, Margin, Rect};
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -37,11 +41,23 @@ struct Args {
     #[arg(long)]
     headless: bool,
 
+    /// Run as a background daemon
+    #[arg(short, long)]
+    daemon: bool,
+
+    /// Path to the PID file (daemon mode only)
+    #[arg(long)]
+    pid_file: Option<PathBuf>,
+
+    /// Path to the SQLite database
+    #[arg(long)]
+    db_path: Option<PathBuf>,
+
     /// Output format (json, csv, plain)
     #[arg(short, long, default_value = "plain")]
     output: String,
 
-    /// Interval between snapshots in seconds (headless mode only)
+    /// Interval between snapshots in seconds (headless/daemon mode only)
     #[arg(short, long, default_value = "1")]
     interval: u64,
 
@@ -56,6 +72,24 @@ struct Args {
     /// Verify traffic accuracy in a temporary network namespace
     #[arg(long)]
     verify_accuracy: bool,
+}
+
+fn resolve_db_path(db_arg: Option<PathBuf>, daemon: bool) -> PathBuf {
+    if let Some(path) = db_arg {
+        return path;
+    }
+
+    if daemon {
+        let path = PathBuf::from("/var/lib/netmonitor/netmonitor.db");
+        if let Some(parent) = path.parent() {
+            if parent.exists() {
+                return path;
+            }
+        }
+    }
+
+    // Default to local directory if /var/lib doesn't exist or not in daemon mode
+    PathBuf::from("netmonitor.db")
 }
 
 fn check_caps() -> Result<(), anyhow::Error> {
@@ -75,6 +109,7 @@ fn check_caps() -> Result<(), anyhow::Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    env_logger::init();
     let args = Args::parse();
     let (config, config_path) = Config::load(args.config);
 
@@ -88,7 +123,7 @@ async fn main() -> Result<(), anyhow::Error> {
     };
     let ret = unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
     if ret != 0 {
-        eprintln!("Failed to increase rlimit RLIMIT_MEMLOCK: {}", ret);
+        warn!("Failed to increase rlimit RLIMIT_MEMLOCK: {}", ret);
     }
 
     // Load the BPF program via AyaCollector
@@ -100,16 +135,95 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     };
 
-    let mut db = DbManager::new("netmonitor.db")?;
-    let historical_data = db.load_historical_stats()?;
-    info!(
-        "Loaded historical stats for {} processes",
-        historical_data.len()
-    );
-
     let resolver = core::services::identity::LocalResolver::new(Duration::from_secs(10));
     let identity_service = core::services::IdentityService::new(resolver);
-    let mut monitoring = core::services::MonitoringService::new(collector, identity_service);
+    let monitoring = core::services::MonitoringService::new(collector, identity_service);
+
+    let db_path = resolve_db_path(args.db_path, args.daemon);
+    let mut db = DbManager::new(&db_path)?;
+    let historical_data = db.load_historical_stats()?;
+    info!(
+        "Loaded historical stats for {} processes from {}",
+        historical_data.len(),
+        db_path.display()
+    );
+
+    if args.verify_accuracy {
+        println!("Verification mode active. Monitoring for 3 seconds...");
+        let mut monitoring = monitoring;
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(3) {
+            monitoring.collector.collect_stats()?;
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        // Report stats
+        let stats = monitoring.collector.collect_stats()?;
+        for (pid, stat) in stats {
+            if stat.bytes_sent > 0 || stat.bytes_recv > 0 {
+                println!(
+                    "PID {}: Sent {} bytes, Recv {} bytes",
+                    pid, stat.bytes_sent, stat.bytes_recv
+                );
+            }
+        }
+        return Ok(());
+    }
+
+    if args.daemon {
+        let mut daemonize = Daemonize::new()
+            .pid_file(args.pid_file.unwrap_or_else(|| PathBuf::from("/run/netmonitor/netmonitor.pid")))
+            .chown_pid_file(true)
+            .working_directory("/tmp");
+
+        if let Some(log_path) = &args.log_file {
+            let stdout = fs::File::create(log_path)?;
+            let stderr = fs::File::create(log_path)?;
+            daemonize = daemonize.stdout(stdout).stderr(stderr);
+        }
+
+        match daemonize.start() {
+            Ok(_) => {
+                info!("NetMonitor daemon started.");
+                let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
+                
+                // Signal Handling for Daemon
+                let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+                let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+                let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
+
+                let shutdown_tx_clone = shutdown_tx.clone();
+                tokio::spawn(async move {
+                    tokio::select! {
+                        _ = sigterm.recv() => { info!("SIGTERM received"); },
+                        _ = sigint.recv() => { info!("SIGINT received"); },
+                    }
+                    let _ = shutdown_tx_clone.send(());
+                });
+
+                tokio::spawn(async move {
+                    loop {
+                        let _ = sighup.recv().await;
+                        info!("SIGHUP received, reloading config (not fully implemented yet)");
+                        // TODO: Implement config reload logic
+                    }
+                });
+
+                let mut monitoring_loop = MonitoringLoop::new(
+                    monitoring,
+                    db,
+                    config,
+                    Duration::from_secs(args.interval),
+                );
+
+                monitoring_loop.run(shutdown_rx, None, args.count).await?;
+                return Ok(());
+            }
+            Err(e) => {
+                error!("Failed to daemonize: {}", e);
+                return Err(e.into());
+            }
+        }
+    }
 
     if args.headless {
         let formatter: Box<dyn Formatter> = match args.output.as_str() {
@@ -120,7 +234,7 @@ async fn main() -> Result<(), anyhow::Error> {
             _ => Box::new(export::PlainFormatter),
         };
 
-        let mut output_writer: Box<dyn std::io::Write> = if let Some(path) = args.log_file {
+        let output_writer: Box<dyn std::io::Write + Send> = if let Some(path) = args.log_file {
             Box::new(
                 std::fs::OpenOptions::new()
                     .create(true)
@@ -136,92 +250,21 @@ async fn main() -> Result<(), anyhow::Error> {
             args.output, args.interval
         );
 
-        if args.verify_accuracy {
-            println!("Verification mode active. Monitoring for 3 seconds...");
-            let start = Instant::now();
-            while start.elapsed() < Duration::from_secs(3) {
-                monitoring.collector.collect_stats()?;
-                tokio::time::sleep(Duration::from_millis(100)).await;
+        let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
+        tokio::spawn(async move {
+            if let Ok(_) = tokio::signal::ctrl_c().await {
+                let _ = shutdown_tx.send(());
             }
-            // Report stats
-            let stats = monitoring.collector.collect_stats()?;
-            for (pid, stat) in stats {
-                if stat.bytes_sent > 0 || stat.bytes_recv > 0 {
-                    println!(
-                        "PID {}: Sent {} bytes, Recv {} bytes",
-                        pid, stat.bytes_sent, stat.bytes_recv
-                    );
-                }
-            }
-            return Ok(());
-        }
+        });
 
-        let mut count = 0;
-        let tick_rate = Duration::from_secs(args.interval);
-        let mut db_deltas: std::collections::HashMap<u32, (u64, u64)> =
-            std::collections::HashMap::new();
-        let mut last_db_flush = Instant::now();
-        let db_flush_rate = Duration::from_secs(60);
+        let mut monitoring_loop = MonitoringLoop::new(
+            monitoring,
+            db,
+            config,
+            Duration::from_secs(args.interval),
+        );
 
-        loop {
-            if let Some(max_count) = args.count {
-                if count >= max_count {
-                    break;
-                }
-            }
-
-            match monitoring.snapshot(config.network.dns_resolution, config.network.geo_ip_enabled) {
-                Ok(snapshot) => {
-                    formatter.format(&snapshot, &mut output_writer)?;
-                    count += 1;
-
-                    // Update deltas for DB
-                    for proc in &snapshot.processes {
-                        let entry = db_deltas.entry(proc.pid.0).or_insert((0, 0));
-                        entry.0 += proc.up_rate.0;
-                        entry.1 += proc.down_rate.0;
-                    }
-
-                    // Periodic DB Flush
-                    if last_db_flush.elapsed() >= db_flush_rate {
-                        let mut batch = Vec::new();
-                        for (pid, (up, down)) in db_deltas.drain() {
-                            if up > 0 || down > 0 {
-                                let info = monitoring.identity.get_info(core::Pid(pid));
-                                batch.push((pid, info.name, up, down));
-                            }
-                        }
-                        if !batch.is_empty() {
-                            let _ = db.flush_batch(&batch);
-                        }
-                        last_db_flush = Instant::now();
-                    }
-                }
-                Err(e) => error!("Snapshot failed: {}", e),
-            }
-
-            tokio::select! {
-                _ = tokio::time::sleep(tick_rate) => {},
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\nHeadless mode interrupted.");
-                    break;
-                }
-            }
-        }
-
-        // Final DB Flush
-        let mut batch = Vec::new();
-        for (pid, (up, down)) in db_deltas.drain() {
-            if up > 0 || down > 0 {
-                let info = monitoring.identity.get_info(core::Pid(pid));
-                batch.push((pid, info.name, up, down));
-            }
-        }
-        if !batch.is_empty() {
-            let _ = db.flush_batch(&batch);
-        }
-
-        println!("Headless mode exiting.");
+        monitoring_loop.run(shutdown_rx, Some((formatter, output_writer)), args.count).await?;
         return Ok(());
     }
 

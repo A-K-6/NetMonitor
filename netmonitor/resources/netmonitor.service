@@ -1,0 +1,30 @@
+[Unit]
+Description=NetMonitor Background Daemon
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/local/bin/netmonitor --daemon --log-file /var/log/netmonitor/traffic.log --db-path /var/lib/netmonitor/netmonitor.db --pid-file /run/netmonitor/netmonitor.pid
+PIDFile=/run/netmonitor/netmonitor.pid
+RuntimeDirectory=netmonitor
+Environment=RUST_LOG=info
+Restart=always
+User=netmonitor
+Group=netmonitor
+
+# Memory locking for eBPF
+LimitMEMLOCK=infinity
+
+# Capabilities for eBPF and Network Monitoring
+AmbientCapabilities=CAP_NET_ADMIN CAP_BPF CAP_PERFMON
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_BPF CAP_PERFMON
+
+# Hardening
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+ReadOnlyPaths=/usr/local/bin/netmonitor
+ReadWritePaths=/var/lib/netmonitor /var/log/netmonitor
+
+[Install]
+WantedBy=multi-user.target

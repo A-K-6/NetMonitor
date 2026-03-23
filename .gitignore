@@ -37,6 +37,9 @@ snapshots.log
 # db
 *.db
 
+# Embedded BPF Artifact
+netmonitor/resources/netmonitor-ebpf
+
 # Gemini Specifics (Local Only)
 GEMINI.md
 .gemini/
