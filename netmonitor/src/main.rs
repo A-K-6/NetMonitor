@@ -3,6 +3,7 @@ mod config;
 mod core;
 mod db;
 mod dns;
+mod export;
 mod geoip;
 mod process;
 mod protocol;
@@ -18,6 +19,7 @@ use config::Config;
 use core::Collector;
 use crossterm::event::{Event, KeyCode, MouseButton, MouseEventKind};
 use db::DbManager;
+use export::Formatter;
 use log::{error, info};
 use ratatui::layout::{Direction, Layout, Margin, Rect};
 use std::env;
@@ -34,6 +36,22 @@ struct Args {
     /// Run in headless mode (no TUI)
     #[arg(long)]
     headless: bool,
+
+    /// Output format (json, csv, plain)
+    #[arg(short, long, default_value = "plain")]
+    output: String,
+
+    /// Interval between snapshots in seconds (headless mode only)
+    #[arg(short, long, default_value = "1")]
+    interval: u64,
+
+    /// Number of snapshots to take before exiting (headless mode only)
+    #[arg(short = 'n', long)]
+    count: Option<usize>,
+
+    /// Path to a file to log snapshots (headless mode only)
+    #[arg(long)]
+    log_file: Option<PathBuf>,
 
     /// Verify traffic accuracy in a temporary network namespace
     #[arg(long)]
@@ -91,21 +109,42 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let resolver = core::services::identity::LocalResolver::new(Duration::from_secs(10));
     let identity_service = core::services::IdentityService::new(resolver);
-    let monitoring = core::services::MonitoringService::new(collector, identity_service);
+    let mut monitoring = core::services::MonitoringService::new(collector, identity_service);
 
     if args.headless {
-        println!("NetMonitor running in headless mode.");
-        let mut app = App::new(monitoring, historical_data, config);
+        let formatter: Box<dyn Formatter> = match args.output.as_str() {
+            "json" => Box::new(export::JsonFormatter),
+            "csv" => Box::new(export::CsvFormatter {
+                include_header: true,
+            }),
+            _ => Box::new(export::PlainFormatter),
+        };
+
+        let mut output_writer: Box<dyn std::io::Write> = if let Some(path) = args.log_file {
+            Box::new(
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)?,
+            )
+        } else {
+            Box::new(std::io::stdout())
+        };
+
+        println!(
+            "NetMonitor running in headless mode (output: {}, interval: {}s).",
+            args.output, args.interval
+        );
 
         if args.verify_accuracy {
             println!("Verification mode active. Monitoring for 3 seconds...");
             let start = Instant::now();
             while start.elapsed() < Duration::from_secs(3) {
-                app.monitoring.collector.collect_stats()?;
+                monitoring.collector.collect_stats()?;
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-            // Report stats for 'nc' or other processes
-            let stats = app.monitoring.collector.collect_stats()?;
+            // Report stats
+            let stats = monitoring.collector.collect_stats()?;
             for (pid, stat) in stats {
                 if stat.bytes_sent > 0 || stat.bytes_recv > 0 {
                     println!(
@@ -117,8 +156,71 @@ async fn main() -> Result<(), anyhow::Error> {
             return Ok(());
         }
 
-        // Just run until interrupted
-        tokio::signal::ctrl_c().await?;
+        let mut count = 0;
+        let tick_rate = Duration::from_secs(args.interval);
+        let mut db_deltas: std::collections::HashMap<u32, (u64, u64)> =
+            std::collections::HashMap::new();
+        let mut last_db_flush = Instant::now();
+        let db_flush_rate = Duration::from_secs(60);
+
+        loop {
+            if let Some(max_count) = args.count {
+                if count >= max_count {
+                    break;
+                }
+            }
+
+            match monitoring.snapshot(config.network.dns_resolution, config.network.geo_ip_enabled) {
+                Ok(snapshot) => {
+                    formatter.format(&snapshot, &mut output_writer)?;
+                    count += 1;
+
+                    // Update deltas for DB
+                    for proc in &snapshot.processes {
+                        let entry = db_deltas.entry(proc.pid.0).or_insert((0, 0));
+                        entry.0 += proc.up_rate.0;
+                        entry.1 += proc.down_rate.0;
+                    }
+
+                    // Periodic DB Flush
+                    if last_db_flush.elapsed() >= db_flush_rate {
+                        let mut batch = Vec::new();
+                        for (pid, (up, down)) in db_deltas.drain() {
+                            if up > 0 || down > 0 {
+                                let info = monitoring.identity.get_info(core::Pid(pid));
+                                batch.push((pid, info.name, up, down));
+                            }
+                        }
+                        if !batch.is_empty() {
+                            let _ = db.flush_batch(&batch);
+                        }
+                        last_db_flush = Instant::now();
+                    }
+                }
+                Err(e) => error!("Snapshot failed: {}", e),
+            }
+
+            tokio::select! {
+                _ = tokio::time::sleep(tick_rate) => {},
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\nHeadless mode interrupted.");
+                    break;
+                }
+            }
+        }
+
+        // Final DB Flush
+        let mut batch = Vec::new();
+        for (pid, (up, down)) in db_deltas.drain() {
+            if up > 0 || down > 0 {
+                let info = monitoring.identity.get_info(core::Pid(pid));
+                batch.push((pid, info.name, up, down));
+            }
+        }
+        if !batch.is_empty() {
+            let _ = db.flush_batch(&batch);
+        }
+
         println!("Headless mode exiting.");
         return Ok(());
     }

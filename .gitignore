@@ -30,6 +30,9 @@ dist/
 *.deb
 *.rpm
 
+# Log & Export files (local testing)
+bandwidth.csv
+snapshots.log
 
 # db
 *.db

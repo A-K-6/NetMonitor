@@ -1,3 +1,14 @@
+2026-03-23 15:10 - Completed Task 032: Headless Mode & Data Exporting.
+- Implemented `--headless` mode to run NetMonitor without the TUI.
+- Added `--output <format>` support for `json`, `csv`, and `plain` text snapshots.
+- Added `--interval <seconds>` and `--count <n>` flags for snapshot frequency and duration.
+- Implemented `--log-file <path>` to redirect headless output to a file.
+- Added `Serialize` and `Deserialize` to core domain models for easy export.
+- Created `Formatter` trait and implementations for JSON, CSV, and Plain text formatting.
+- Refactored `main.rs` to support both TUI and Headless modes with proper DB flushing.
+- Verified headless operation with JSON and CSV outputs.
+- Moved Task 032 to `done/` and updated `ROADMAP.md`.
+
 2026-03-23 14:00 - Updated ROADMAP.md and Proposed Task 032: Headless Mode & Data Exporting.
 - Marked 'Automated Testing Suite' and 'Performance Audit' as completed in Phase 4.
 - Created `docs/ideas/todo/032-headless-mode-and-exporting.md` to initiate Task 032.

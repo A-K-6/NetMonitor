@@ -2,7 +2,7 @@ use crate::core::types::{Bytes, Pid};
 use crate::process::ProcessContext;
 use std::collections::HashMap;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProcessSummary {
     pub pid: Pid,
     pub name: String,
@@ -15,7 +15,7 @@ pub struct ProcessSummary {
     pub down_rate: Bytes,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ConnectionSummary {
     pub proto: u32,
     pub src_ip: String,
@@ -30,7 +30,7 @@ pub struct ConnectionSummary {
     pub service: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MonitoringSnapshot {
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub processes: Vec<ProcessSummary>,

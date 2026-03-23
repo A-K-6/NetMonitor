@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ProcessContext {
     Systemd(String),    // e.g., "nginx.service"
     Docker(String),     // e.g., "db-container" or ID
