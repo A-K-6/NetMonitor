@@ -22,7 +22,7 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Cumulative Stats:** Track total data consumed since the application started.
 - [x] **TUI Polish:** Make the UI more beautiful with advanced Ratatui widgets (Sparklines, Alignment, Dialogs).
 
-## Phase 3: Advanced Power-User Features (Current)
+## Phase 3: Advanced Power-User Features (Completed)
 *Goal: Add intelligence, control, and deep-packet insights.*
 - [x] **The "Kill-Switch":** Implement the `k` hotkey to send `SIGKILL` to a selected bandwidth-hogging process.
 - [x] **Protocol Expansion:** Implement `udp_sendmsg` and `icmp` tracking to cover non-TCP traffic.
@@ -34,7 +34,7 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Interactive Graphs:** Full-screen historical graph mode for specific processes.
 - [x] **Smart Alerts:** System notifications for when a process exceeds a defined bandwidth threshold.
 - [x] **Help Overlay:** A dedicated `?` screen explaining all keybindings and features.
-- [ ] **TUI Refinement:**
+- [x] **TUI Refinement:**
     - [x] **Custom Themes:** Support for selectable color schemes (e.g., Dracula, Solarized, Monokai).
     - [x] **Mouse Support:** Basic click-to-select and scroll support for the process table.
     - [x] **Extended Mouse Support:** Clickable table headers for sorting and interactive dialog elements.
@@ -47,9 +47,9 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Container & Service Context:** Resolve and display systemd service, Docker container, and K8s pod names for PIDs.
 - [x] **Active Traffic Shaping:** "Throttling" process bandwidth directly from the TUI using `cgroup_skb` eBPF.
 - [x] **Writing the ReadMe:** Comprehensive documentation of new features, configuration, and advanced usage.
-- [ ] **Phase 3 Final Review:** A comprehensive, project-wide code review and refactor session to ensure stability before Phase 4.
+- [x] **Phase 3 Final Review:** A comprehensive, project-wide code review and refactor session to ensure stability before Phase 4.
 
-## Phase 4: Stability & Testing
+## Phase 4: Stability & Testing (Current)
 *Goal: Professional-grade reliability and automated verification.*
 - [ ] **Automated Testing Suite:** 
     - [ ] Implement unit tests for userspace logic (Resolver, Config, TUI state).

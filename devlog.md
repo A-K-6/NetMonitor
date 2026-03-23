@@ -1,3 +1,8 @@
+2026-03-23 12:00 - Proposed Task 031: Automated Testing Suite & CI/CD Pipeline.
+- Created `docs/ideas/todo/031-automated-testing-and-ci.md` to initiate Phase 4 (Stability & Testing).
+- Updated `ROADMAP.md` to mark Phase 3 as completed and Phase 4 as current.
+- Defined roadmap for GitHub Actions setup and service-layer test expansion.
+
 2026-03-23 11:30 - Completed Task 030: Final Polish, Technical Debt Cleanup & Architectural Validation.
 - Resolved all unused imports and dead code warnings left from the Phase 3 refactor.
 - Integrated `EnforcementService` into the TUI to handle real-time thresholds and throttles.
