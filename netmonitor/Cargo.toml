@@ -4,6 +4,7 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "High-performance Linux network monitor using eBPF and Ratatui"
 
 [dependencies]
 anyhow = "1.0"
@@ -44,7 +45,7 @@ depends = "$auto, libcap2-bin"
 section = "net"
 priority = "optional"
 assets = [
-    ["target/release/netmonitor", "usr/bin/netmonitor", "755"],
+    ["../target/release/netmonitor", "usr/bin/netmonitor", "755"],
     ["resources/netmonitor.service", "lib/systemd/system/netmonitor.service", "644"],
     ["resources/netmonitor.1", "usr/share/man/man1/netmonitor.1", "644"],
 ]
