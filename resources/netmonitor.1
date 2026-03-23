@@ -1,0 +1,115 @@
+.TH NETMONITOR 1 "2026-03-23" "v0.1.0" "NetMonitor Manual"
+.SH NAME
+netmonitor \- A high-performance network monitoring tool for Linux using eBPF.
+.SH SYNOPSIS
+.B netmonitor
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B NetMonitor
+is a real-time network traffic analyzer that provides per-process bandwidth visibility. It leverages eBPF (Extended Berkeley Packet Filter) for deep packet inspection with minimal overhead and provides a modern Terminal User Interface (TUI).
+.SH OPTIONS
+.TP
+.BR \-c ", " \-\-config " \fIPATH\fR"
+Path to the configuration file (default: \fI~/.config/netmonitor/config.toml\fR or \fI./config.toml\fR).
+.TP
+.B \-\-headless
+Run in headless mode without the TUI. Output is printed to stdout or a log file.
+.TP
+.BR \-d ", " \-\-daemon
+Run as a background daemon. Requires \fBCAP_NET_ADMIN\fR and \fBCAP_BPF\fR capabilities.
+.TP
+.BR \-\-pid-file " \fIPATH\fR"
+Path to the PID file when running in daemon mode (default: \fI/run/netmonitor/netmonitor.pid\fR).
+.TP
+.BR \-\-db-path " \fIPATH\fR"
+Path to the SQLite database for traffic persistence (default: \fInetmonitor.db\fR or \fI/var/lib/netmonitor/netmonitor.db\fR).
+.TP
+.BR \-o ", " \-\-output " \fIFORMAT\fR"
+Output format for headless mode. Supported formats: \fIplain\fR, \fIjson\fR, \fIcsv\fR (default: \fIplain\fR).
+.TP
+.BR \-i ", " \-\-interval " \fISECONDS\fR"
+Interval between snapshots in seconds for headless and daemon modes (default: 1).
+.TP
+.BR \-n ", " \-\-count " \fINUMBER\fR"
+Number of snapshots to take before exiting in headless mode.
+.TP
+.BR \-\-log-file " \fIPATH\fR"
+Path to a file to log snapshots in headless mode.
+.TP
+.B \-\-verify\-accuracy
+Run a short traffic accuracy verification in a temporary network namespace.
+.SH TUI HOTKEYS
+.TP
+.B q / Esc
+Quit the application or go back from a dialog.
+.TP
+.B k
+Kill the selected process (requires user confirmation).
+.TP
+.B Space
+Toggle multi-process selection for the graph view.
+.TP
+.B a
+Set a bandwidth threshold alert for the selected process.
+.TP
+.B A
+View the recent alerts log.
+.TP
+.B s
+Cycle through sorting columns (PID, Name, Context, Up, Down, Total).
+.TP
+.B c
+Toggle the "Name" column between binary name and service context (systemd/docker/k8s).
+.TP
+.B /
+Search and filter processes by name or context.
+.TP
+.B Enter
+Deep-dive into process connections (shows destination IPs, ports, and protocols).
+.TP
+.B g
+Toggle the traffic history graph for the selected process(es).
+.TP
+.B l
+Toggle between logarithmic and linear scales in the graph view.
+.TP
+.B t
+Open the theme selector to change the TUI color scheme.
+.TP
+.B ?
+Toggle the help overlay.
+.TP
+.B Up / Down
+Navigate the process table or menus.
+.TP
+.B Tab
+Cycle through graph time ranges (10m, 1h, 24h) when the graph view is active.
+.TP
+.B F1 / F2 / F3
+Switch between Dashboard, Process Table, and Alerts views.
+.SH CONFIGURATION
+NetMonitor uses a TOML configuration file. The structure includes sections for network monitoring, TUI settings, and alert thresholds.
+.SH SECURITY
+NetMonitor requires specific Linux capabilities to function:
+.TP
+.B CAP_NET_ADMIN
+To attach eBPF programs to network hooks.
+.TP
+.B CAP_BPF
+To load and manage eBPF programs and maps.
+.PP
+It is recommended to use \fBsetcap\fR to grant these capabilities to the binary rather than running it as full root.
+.SH FILES
+.TP
+.I /usr/bin/netmonitor
+The main binary.
+.TP
+.I /etc/netmonitor/config.toml
+System-wide configuration.
+.TP
+.I /var/lib/netmonitor/netmonitor.db
+Default database path for the daemon.
+.SH BUGS
+Report bugs at <https://github.com/aeen/netmonitor/issues>.
+.SH AUTHOR
+Aeen <your-email@example.com>

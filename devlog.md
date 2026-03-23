@@ -1,3 +1,11 @@
+2026-03-23 19:00 - Completed Task 035: Professional Man Pages & Technical Documentation.
+- Created `resources/netmonitor.1` Roff man page detailing CLI flags and TUI hotkeys.
+- Drafted `docs/man/netmonitor.1.md` as the source for the manual.
+- Integrated man page installation into `cargo-deb` configuration in `netmonitor/Cargo.toml`.
+- Consolidated kernel/userspace interaction details into `docs/kernel/INTERNAL_SPEC.md`.
+- Expanded TUI help overlay with F-key view switching hints and a reference to the man page.
+- Verified man page formatting using `man ./resources/netmonitor.1`.
+
 2026-03-23 18:15 - Fixed CI/CD Toolchain Conflict.
 - Updated `rust-toolchain.toml` to include `rustfmt` and `clippy` components for nightly.
 - Reconfigured `.github/workflows/ci.yml` and `release.yml` to use the project's toolchain file instead of forcing stable.

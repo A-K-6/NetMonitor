@@ -1081,6 +1081,15 @@ fn render_help_overlay<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>
             Cell::from("Tab"),
             Cell::from("Cycle graph time range (when in graph view)"),
         ]),
+        Row::new(vec![
+            Cell::from("F1/F2/F3"),
+            Cell::from("Switch views (Dashboard, Processes, Alerts)"),
+        ]),
+        Row::new(vec![
+            Cell::from(""),
+            Cell::from("See 'man netmonitor' for full documentation"),
+        ])
+        .style(Style::default().fg(theme.header_fg).add_modifier(Modifier::ITALIC)),
     ];
 
     let help_table = Table::new(

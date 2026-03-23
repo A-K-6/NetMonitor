@@ -61,10 +61,10 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Background Mode:** Implement `netmonitord` (Systemd service) for continuous logging.
 - [x] **CI/CD Pipeline:** Setup GitHub Actions for automated linting (`clippy`), formatting (`fmt`), and workspace testing.
 - [x] **Automated Packaging:** Integrate `cargo-deb` to generate `.deb` artifacts in CI/CD and xtask.
-- [ ] **Documentation Expansion:**
-    - [ ] Create initial `man` pages for terminal-based help.
-    - [ ] Generate API/Kernel technical specifications.
-- [ ] **Milestone: Tag v0.0.9** (Beta Release)
+- [x] **Documentation Expansion:**
+    - [x] Create initial `man` pages for terminal-based help.
+    - [x] Generate API/Kernel technical specifications.
+- [x] **Milestone: Tag v0.1.0-beta.1** (Beta Release)
 
 ## Phase 5: Beta Feedback & Refinement
 *Goal: Getting NetMonitor into the hands of early users for real-world testing.*
