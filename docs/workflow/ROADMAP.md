@@ -64,24 +64,21 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [ ] **Documentation Expansion:**
     - [ ] Create initial `man` pages for terminal-based help.
     - [ ] Generate API/Kernel technical specifications.
+- [ ] **Milestone: Tag v0.0.9** (Beta Release)
 
-## Phase 5: Release & Distribution (v0.1.0)
-*Goal: Getting NetMonitor into the hands of users with professional packaging.*
+## Phase 5: Beta Feedback & Refinement
+*Goal: Getting NetMonitor into the hands of early users for real-world testing.*
 - [ ] **Community Feedback Loop:** Establish a Beta/Release Candidate (RC) phase for real-world user feedback.
-- [ ] **Packaging:** 
-    - [ ] Create `.deb` package via `cargo-deb`.
-    - [ ] Create AUR (Arch User Repository) PKGBUILD.
-    - [ ] Provide static binaries for Linux via GitHub Actions.
-- [ ] **Initial Release (v0.1.0):** Tag the first stable release and publish it to GitHub and `crates.io`.
+- [ ] **Packaging Validation:** 
+    - [ ] Verify `.deb` package installs across different Debian/Ubuntu versions.
+    - [ ] Test static binary portability.
 - [ ] **User Manual:** Finalize a compelling `README.md` with high-quality GIFs and usage examples.
 
 ## Phase 6: Hardening & Ecosystem
-*Goal: Long-term sustainability, security, and contribution growth.*
+*Goal: Long-term sustainability, security, and official stable release.*
 - [ ] **Security Audit:** Detailed review of eBPF capability usage and memory safety in userspace.
-- [ ] **Graceful Degradation:** Implement fallback logic for legacy kernels or missing system dependencies (e.g., GeoIP DB).
+- [ ] **Graceful Degradation:** Implement fallback logic for legacy kernels or missing system dependencies.
 - [ ] **Least Privilege Hardening:** Ensure the application runs with the absolute minimum required Linux capabilities.
-- [ ] **Advanced Traffic Control:** Expand "Traffic Shaping" with more granular rules and `cgroup` v1 support if required.
-- [ ] **Open Source Readiness:** 
-    - [ ] Draft `CONTRIBUTING.md` to guide future community contributors.
-    - [ ] Establish a public issue-tracking and feature-request process.
-- [ ] **Maintenance Strategy:** Define the release cycle and LTS (Long Term Support) goals for future versions.
+- [ ] **Open Source Readiness:** Draft `CONTRIBUTING.md` and establish public issue tracking.
+- [ ] **Maintenance Strategy:** Define the release cycle and LTS (Long Term Support) goals.
+- [ ] **Milestone: Tag v0.1.0** (Official Stable Release & Distribution)
