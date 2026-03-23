@@ -54,15 +54,16 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [x] **Automated Testing Suite:** 
     - [x] Implement unit tests for userspace logic (Resolver, Config, TUI state).
     - [x] Implement eBPF integration tests (using `aya-test` or similar).
-- [ ] **CI/CD Pipeline:** Setup GitHub Actions for automated linting (`clippy`), formatting (`fmt`), and cross-platform testing.
 - [x] **Headless Data Exporting:** Implement `--json` and `--csv` output modes for scripting/automation.
 - [x] **Performance Audit:** Verify CPU usage remains <1% under heavy network load.
 - [x] **CO-RE Validation:** Test the binary on multiple kernel versions (BTF support).
 - [x] **Headless Mode:** Implement a mode for JSON/CSV output or Prometheus exporting.
+- [x] **Background Mode:** Implement `netmonitord` (Systemd service) for continuous logging.
+- [ ] **CI/CD Pipeline:** Setup GitHub Actions for automated linting (`clippy`), formatting (`fmt`), and cross-platform testing.
+- [ ] **Automated Packaging:** Integrate `cargo-deb` to generate `.deb` artifacts in CI.
 - [ ] **Documentation Expansion:**
     - [ ] Create initial `man` pages for terminal-based help.
     - [ ] Generate API/Kernel technical specifications.
-- [ ] **Background Mode:** Implement `netmonitord` (Systemd service) for continuous logging.
 
 ## Phase 5: Release & Distribution (v0.1.0)
 *Goal: Getting NetMonitor into the hands of users with professional packaging.*
