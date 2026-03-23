@@ -1,3 +1,9 @@
+2026-03-23 14:00 - Updated ROADMAP.md and Proposed Task 032: Headless Mode & Data Exporting.
+- Marked 'Automated Testing Suite' and 'Performance Audit' as completed in Phase 4.
+- Created `docs/ideas/todo/032-headless-mode-and-exporting.md` to initiate Task 032.
+- Defined scope for `--json`, `--csv`, and headless operation.
+- Outlined plan for a potential Prometheus exporter endpoint.
+
 2026-03-23 13:30 - Completed Task 031: Local Automated Verification & Stability Suite.
 - Implemented comprehensive unit testing for `App`, `TrafficService`, and `EnforcementService`.
 - Added property-based testing for `Config` using `proptest`.

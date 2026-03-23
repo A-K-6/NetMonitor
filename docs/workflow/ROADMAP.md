@@ -51,12 +51,12 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 
 ## Phase 4: Stability & Testing (Current)
 *Goal: Professional-grade reliability and automated verification.*
-- [ ] **Automated Testing Suite:** 
-    - [ ] Implement unit tests for userspace logic (Resolver, Config, TUI state).
-    - [ ] Implement eBPF integration tests (using `aya-test` or similar).
+- [x] **Automated Testing Suite:** 
+    - [x] Implement unit tests for userspace logic (Resolver, Config, TUI state).
+    - [x] Implement eBPF integration tests (using `aya-test` or similar).
 - [ ] **CI/CD Pipeline:** Setup GitHub Actions for automated linting (`clippy`), formatting (`fmt`), and cross-platform testing.
 - [ ] **Headless Data Exporting:** Implement `--json` and `--csv` output modes for scripting/automation.
-- [ ] **Performance Audit:** Verify CPU usage remains <1% under heavy network load.
+- [x] **Performance Audit:** Verify CPU usage remains <1% under heavy network load.
 - [ ] **CO-RE Validation:** Test the binary on multiple kernel versions (BTF support).
 - [ ] **Headless Mode:** Implement a mode for JSON/CSV output or Prometheus exporting.
 - [ ] **Documentation Expansion:**
