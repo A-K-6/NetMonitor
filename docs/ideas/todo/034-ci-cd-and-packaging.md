@@ -15,6 +15,7 @@ As the project nears Phase 5 (Release), we need to ensure that:
 
 ### Task A: Linting & Testing Workflow
 - **`ci.yml`:** Create a workflow that runs on every push/PR.
+- **Caching:** Use `swatinem/rust-cache` to speed up builds across workflow runs.
 - **Steps:**
     - `cargo fmt --check`
     - `cargo clippy --all-targets -- -D warnings`
@@ -22,24 +23,32 @@ As the project nears Phase 5 (Release), we need to ensure that:
 
 ### Task B: Build Workflow
 - **`build.yml`:** Ensure the eBPF and userspace code builds for `x86_64-unknown-linux-gnu`.
-- **Dependencies:** Install `llvm`, `clang`, and `bpf-linker` in the CI environment.
+- **Environment Setup:** Install `llvm`, `clang`, `libcap-dev`, `libelf-dev`, and `bpf-linker` in the GitHub Actions runner.
+- **Xtask Integration:** Use `cargo xtask build-ebpf` to ensure the eBPF skeleton is generated correctly before the userspace build.
 
 ### Task C: Automated Packaging (cargo-deb)
-- **`release.yml`:** A workflow triggered by git tags.
-- **`cargo-deb` Integration:** Configure `Cargo.toml` with metadata for Debian packaging (maintainer, description, systemd service inclusion).
-- **Artifacts:** Upload the `netmonitor` binary and `.deb` file as release assets.
+- **`release.yml`:** A workflow triggered by git tags (e.g., `v*`).
+- **`Cargo.toml` Metadata:** Configure `[package.metadata.deb]` with:
+    - **Maintainer:** Project author.
+    - **Depends:** `$auto, libcap2-bin` (ensures `setcap` is available for post-install).
+    - **Assets:** Map the binary to `/usr/bin/netmonitor` and the service to `/lib/systemd/system/netmonitor.service`.
+- **Artifacts:** Upload the `netmonitor` binary and `.deb` file as release assets with descriptive names.
 
-### Task D: Systemd Service Inclusion
-- Ensure the `cargo-deb` configuration includes:
-    - The `netmonitor` binary in `/usr/bin/`.
-    - The `netmonitor.service` in `/lib/systemd/system/`.
-    - Post-install scripts to create the `netmonitor` user and set file capabilities (`setcap`).
+### Task D: Debian Lifecycle Scripts
+- **Location:** Create `netmonitor/debian/` for management scripts.
+- **`postinst`:** 
+    - Create `netmonitor` system user/group.
+    - Provision `/var/lib/netmonitor` and `/var/log/netmonitor` with correct ownership.
+    - Apply `setcap cap_net_admin,cap_bpf=ep /usr/bin/netmonitor`.
+- **`prerm`:** Stop and disable the `netmonitor.service` before removal.
+- **`postrm`:** Clean up systemd units and configurations.
 
 ## 3. Implementation Plan
-1.  **Update `Cargo.toml`:** Add `[package.metadata.deb]` section with dependencies (`libc6`, `libssl3`) and asset mappings.
-2.  **Create GitHub Workflows:** Add `.github/workflows/ci.yml` and `.github/workflows/release.yml`.
-3.  **Test Packaging Locally:** Run `cargo deb` locally to verify the generated package structure.
-4.  **Refine Xtask:** Ensure `cargo xtask build-ebpf` works seamlessly in a non-interactive CI environment.
+1.  **Update `Cargo.toml`:** Add `[package.metadata.deb]` section and asset mappings.
+2.  **Create Debian Scripts:** Implement `postinst`, `prerm`, and `postrm` in `netmonitor/debian/`.
+3.  **Create GitHub Workflows:** Add `.github/workflows/ci.yml` and `.github/workflows/release.yml` with `rust-cache` support.
+4.  **Test Packaging Locally:** Run `cargo deb` locally and inspect the `.deb` structure using `dpkg -c`.
+5.  **Refine Xtask:** Ensure `cargo xtask build-ebpf` works seamlessly in a non-interactive CI environment.
 
 ## 4. Verification Criteria
 - [ ] PRs show green checkmarks for fmt, clippy, and tests.
