@@ -272,7 +272,7 @@ pub fn render<C: Collector, R: Resolver>(f: &mut Frame, app: &mut App<C, R>) {
 
 fn render_tabs<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>, area: Rect) {
     let theme = &app.current_theme;
-    let titles = vec!["[F1] Dashboard", "[F2] Processes", "[F3] Alerts"];
+    let titles = ["[F1] Dashboard", "[F2] Processes", "[F3] Alerts"];
     let titles_spans: Vec<Line> = titles
         .iter()
         .map(|t| {
@@ -418,8 +418,8 @@ fn render_process_table<C: Collector, R: Resolver>(f: &mut Frame, app: &mut App<
                 let down = item.down_bytes as f64 / 1024.0;
                 let total = item.total_bytes as f64 / 1024.0;
 
-                let threshold = app.thresholds.get(&item.pid);
-                let exceeded = threshold.map_or(false, |&t| (up + down) > t as f64);
+                let threshold = app.monitoring.enforcement.get_threshold(crate::core::Pid(item.pid));
+                let exceeded = threshold.is_some_and(|t| (up + down) > t as f64);
 
                 let base_style = if exceeded {
                     Style::default()
@@ -437,7 +437,7 @@ fn render_process_table<C: Collector, R: Resolver>(f: &mut Frame, app: &mut App<
                     format!("[ ] {}", item.pid)
                 };
 
-                let throttle = app.throttles.get(&item.pid);
+                let throttle = app.monitoring.enforcement.get_throttle(crate::core::Pid(item.pid));
                 let name_val = if app.show_context {
                     item.context.label()
                 } else {
@@ -520,10 +520,13 @@ fn render_dashboard<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>, a
     // Traffic Aggregates
     let up_kbs = app.total_upload as f64 / 1024.0;
     let down_kbs = app.total_download as f64 / 1024.0;
+    let sess_up = app.session_upload as f64 / (1024.0 * 1024.0);
+    let sess_down = app.session_download as f64 / (1024.0 * 1024.0);
+
     let traffic_text = vec![
         Line::from(vec![
             Span::styled(
-                "Total Upload:   ",
+                "Current Upload:   ",
                 Style::default().fg(theme.header_fg).bg(theme.bg),
             ),
             Span::styled(
@@ -536,7 +539,7 @@ fn render_dashboard<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>, a
         ]),
         Line::from(vec![
             Span::styled(
-                "Total Download: ",
+                "Current Download: ",
                 Style::default().fg(theme.header_fg).bg(theme.bg),
             ),
             Span::styled(
@@ -545,6 +548,27 @@ fn render_dashboard<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>, a
                     .fg(theme.download_fg)
                     .add_modifier(Modifier::BOLD)
                     .bg(theme.bg),
+            ),
+        ]),
+        Line::from(Span::styled("", Style::default().bg(theme.bg))),
+        Line::from(vec![
+            Span::styled(
+                "Session Upload:   ",
+                Style::default().fg(theme.header_fg).bg(theme.bg),
+            ),
+            Span::styled(
+                format!("{:.2} MB", sess_up),
+                Style::default().fg(theme.upload_fg).bg(theme.bg),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Session Download: ",
+                Style::default().fg(theme.header_fg).bg(theme.bg),
+            ),
+            Span::styled(
+                format!("{:.2} MB", sess_down),
+                Style::default().fg(theme.download_fg).bg(theme.bg),
             ),
         ]),
         Line::from(Span::styled("", Style::default().bg(theme.bg))),
@@ -629,7 +653,7 @@ fn render_dashboard<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>, a
 
     // Top Talkers (Mini Table)
     let mut talkers = app.process_history.values().collect::<Vec<_>>();
-    talkers.sort_by(|a, b| b.total_bytes.cmp(&a.total_bytes));
+    talkers.sort_by_key(|b| std::cmp::Reverse(b.total_bytes));
     let talker_rows: Vec<Row> = talkers
         .iter()
         .take(10)
@@ -673,7 +697,7 @@ fn render_dashboard<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>, a
         .iter()
         .map(|(c, (up, down))| (c.clone(), up + down))
         .collect();
-    countries.sort_by(|a, b| b.1.cmp(&a.1));
+    countries.sort_by_key(|b| std::cmp::Reverse(b.1));
     let country_rows: Vec<Row> = countries
         .iter()
         .take(10)
@@ -833,7 +857,7 @@ fn render_detail_view<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>,
                 .split(area);
 
             // Info Paragraph
-            let info_text = vec![
+            let info_text = [
                 format!("PID:        {}", row.pid),
                 format!("Name:       {}", row.name),
                 "".to_string(),
@@ -1105,7 +1129,7 @@ fn render_graph_view<C: Collector, R: Resolver>(f: &mut Frame, app: &App<C, R>, 
     ];
 
     // Prepare all data first to ensure it lives long enough for the chart
-    let prepared_data: Vec<(Vec<(f64, f64)>, Vec<(f64, f64)>, String, u32)> = app
+    let prepared_data: Vec<_> = app
         .graph_series
         .iter()
         .map(|series| {

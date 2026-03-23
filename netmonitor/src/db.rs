@@ -135,7 +135,7 @@ impl DbManager {
                 let up: u64 = row.get(1)?;
                 let down: u64 = row.get(2)?;
 
-                let dt = DateTime::from_timestamp(ts_secs, 0).unwrap_or_else(|| Utc::now());
+                let dt = DateTime::from_timestamp(ts_secs, 0).unwrap_or_else(Utc::now);
                 Ok((dt, up, down))
             })?;
 
@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_get_aggregated_stats() {
-        let mut db = DbManager::new(":memory:").unwrap();
+        let db = DbManager::new(":memory:").unwrap();
         let now = Utc::now();
         let start = now - chrono::Duration::hours(2);
         let end = now;

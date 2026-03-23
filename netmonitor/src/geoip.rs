@@ -43,7 +43,7 @@ impl GeoResolver {
     }
 }
 
-pub static RESOLVER: Lazy<GeoResolver> = Lazy::new(|| GeoResolver::new());
+pub static RESOLVER: Lazy<GeoResolver> = Lazy::new(GeoResolver::new);
 
 #[cfg(test)]
 mod tests {

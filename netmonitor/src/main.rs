@@ -10,11 +10,7 @@ mod theme;
 mod tui;
 mod ui;
 
-use app::{App, Column, HistoricalRange, ProcessRow, TimeRange};
-use aya::maps::HashMap;
-use aya::programs::{CgroupAttachMode, CgroupSkb, CgroupSkbAttachType, KProbe};
-use aya::Ebpf;
-use aya_log::EbpfLogger;
+use app::{App, Column, HistoricalRange, TimeRange};
 use caps::{has_cap, CapSet, Capability};
 use chrono::Utc;
 use clap::Parser;
@@ -22,8 +18,6 @@ use config::Config;
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
 use db::DbManager;
 use log::{error, info};
-use netmonitor_common::{ConnectionKey, ThrottleConfig, TrafficStats};
-use process::ProcessResolver;
 use ratatui::layout::{Direction, Layout, Margin, Rect};
 use std::env;
 use std::path::PathBuf;
@@ -58,9 +52,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let (config, config_path) = Config::load(args.config);
 
     // Check capabilities before loading
-    if let Err(e) = check_caps() {
-        return Err(e);
-    }
+    check_caps()?;
 
     // Bump RLIMIT_MEMLOCK to allow BPF programs to load
     let rlim = libc::rlimit {
@@ -179,7 +171,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         }
                     } else if app.show_threshold_dialog {
                         match key.code {
-                            KeyCode::Char(c) if c.is_digit(10) => {
+                            KeyCode::Char(c) if c.is_ascii_digit() => {
                                 app.threshold_input.push(c);
                             }
                             KeyCode::Backspace => {
@@ -190,13 +182,13 @@ async fn main() -> Result<(), anyhow::Error> {
                                     if let Some(row) = app.process_data.get(i) {
                                         if let Ok(val) = app.threshold_input.parse::<u64>() {
                                             if val > 0 {
-                                                app.thresholds.insert(row.pid, val);
+                                                app.monitoring.enforcement.set_threshold(core::Pid(row.pid), val);
                                                 app.status_message = Some(format!(
                                                     "Set threshold for {} to {} KB/s",
                                                     row.name, val
                                                 ));
                                             } else {
-                                                app.thresholds.remove(&row.pid);
+                                                app.monitoring.enforcement.remove_threshold(core::Pid(row.pid));
                                                 app.status_message = Some(format!(
                                                     "Removed threshold for {}",
                                                     row.name
@@ -216,7 +208,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         }
                     } else if app.show_throttle_dialog {
                         match key.code {
-                            KeyCode::Char(c) if c.is_digit(10) => {
+                            KeyCode::Char(c) if c.is_ascii_digit() => {
                                 app.throttle_input.push(c);
                             }
                             KeyCode::Backspace => {
@@ -227,7 +219,6 @@ async fn main() -> Result<(), anyhow::Error> {
                                     if let Some(row) = app.process_data.get(i) {
                                         if let Ok(val) = app.throttle_input.parse::<u64>() {
                                             if val > 0 {
-                                                app.throttles.insert(row.pid, val);
                                                 // Update eBPF map
                                                 let _ = app.monitoring.enforcement.set_throttle(
                                                     &mut app.monitoring.collector,
@@ -239,7 +230,6 @@ async fn main() -> Result<(), anyhow::Error> {
                                                     row.name, val
                                                 ));
                                             } else {
-                                                app.throttles.remove(&row.pid);
                                                 let _ = app.monitoring.enforcement.clear_throttle(
                                                     &mut app.monitoring.collector,
                                                     core::Pid(row.pid),
@@ -391,8 +381,8 @@ async fn main() -> Result<(), anyhow::Error> {
                                     app.is_running = false;
                                 }
                             }
-                            KeyCode::Char(' ') => {
-                                if app.view_mode == app::ViewMode::ProcessTable {
+                            KeyCode::Char(' ')
+                                if app.view_mode == app::ViewMode::ProcessTable => {
                                     if let Some(i) = app.table_state.selected() {
                                         if let Some(row) = app.process_data.get(i) {
                                             if app.selected_pids.contains(&row.pid) {
@@ -403,7 +393,6 @@ async fn main() -> Result<(), anyhow::Error> {
                                         }
                                     }
                                 }
-                            }
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 app.is_running = false;
                             }
@@ -478,11 +467,10 @@ async fn main() -> Result<(), anyhow::Error> {
                                     }
                                 }
                             }
-                            KeyCode::Char('k') => {
-                                if app.table_state.selected().is_some() {
+                            KeyCode::Char('k')
+                                if app.table_state.selected().is_some() => {
                                     app.show_kill_dialog = true;
                                 }
-                            }
                             KeyCode::Char('s') => {
                                 // Cycle sort columns
                                 let next_col = match app.sort_column {
@@ -509,18 +497,16 @@ async fn main() -> Result<(), anyhow::Error> {
                             KeyCode::Char('?') | KeyCode::Char('h') => {
                                 app.show_help = true;
                             }
-                            KeyCode::Char('a') => {
-                                if app.table_state.selected().is_some() {
+                            KeyCode::Char('a')
+                                if app.table_state.selected().is_some() => {
                                     app.show_threshold_dialog = true;
                                     app.threshold_input.clear();
                                 }
-                            }
-                            KeyCode::Char('b') => {
-                                if app.table_state.selected().is_some() {
+                            KeyCode::Char('b')
+                                if app.table_state.selected().is_some() => {
                                     app.show_throttle_dialog = true;
                                     app.throttle_input.clear();
                                 }
-                            }
                             KeyCode::Char('A') => {
                                 app.show_alerts = !app.show_alerts;
                             }
@@ -597,8 +583,7 @@ async fn main() -> Result<(), anyhow::Error> {
                                     && mouse.column < area.x + area.width
                                     && mouse.row >= area.y
                                     && mouse.row < area.y + area.height
-                                {
-                                    if mouse.row == area.y + 4 {
+                                    && mouse.row == area.y + 4 {
                                         let text = "(y)es / (n)o";
                                         let start_x = area.x
                                             + (area.width.saturating_sub(text.len() as u16)) / 2;
@@ -631,7 +616,6 @@ async fn main() -> Result<(), anyhow::Error> {
                                             app.show_kill_dialog = false;
                                         }
                                     }
-                                }
                             } else if !app.show_help
                                 && !app.show_alerts
                                 && !app.show_graph
@@ -963,6 +947,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 Ok(snapshot) => {
                     app.total_upload = snapshot.total_up.0;
                     app.total_download = snapshot.total_down.0;
+                    app.session_upload = snapshot.session_up.0;
+                    app.session_download = snapshot.session_down.0;
 
                     // Update global history for graphs
                     app.history_up.push_back(snapshot.total_up.0);
@@ -987,12 +973,13 @@ async fn main() -> Result<(), anyhow::Error> {
                                     last_down_bytes: 0,
                                 });
 
-                        let up_delta = proc.up.0.saturating_sub(hist.last_up_bytes);
-                        let down_delta = proc.down.0.saturating_sub(hist.last_down_bytes);
+                        let up_delta = proc.up_rate.0;
+                        let down_delta = proc.down_rate.0;
 
                         hist.up_bytes = up_delta;
                         hist.down_bytes = down_delta;
                         hist.total_bytes += up_delta + down_delta;
+                        // Use proc.total.0 for consistency if we wanted, but we keep total_bytes as sum over app lifetime
                         hist.last_up_bytes = proc.up.0;
                         hist.last_down_bytes = proc.down.0;
 
@@ -1003,16 +990,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
                         // Alert check
                         let threshold = app
-                            .thresholds
-                            .get(&proc.pid.0)
-                            .cloned()
+                            .monitoring
+                            .enforcement
+                            .get_threshold(core::Pid(proc.pid.0))
                             .or_else(|| app.config.alerts.processes.get(&hist.name).cloned())
                             .unwrap_or(app.config.alerts.default_threshold);
 
                         let current_rate = (up_delta + down_delta) / 1024;
                         if current_rate > threshold && threshold > 0 {
                             app.alerts.push_back(app::Alert {
-                                timestamp: Utc::now(),
+                                timestamp: snapshot.timestamp,
                                 pid: proc.pid.0,
                                 process_name: hist.name.clone(),
                                 value: current_rate,

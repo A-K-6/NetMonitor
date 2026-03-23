@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
     #[serde(default)]
     pub ui: UiConfig,
@@ -60,16 +60,6 @@ fn default_true() -> bool {
 }
 fn default_threshold() -> u64 {
     0
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            ui: UiConfig::default(),
-            network: NetworkConfig::default(),
-            alerts: AlertConfig::default(),
-        }
-    }
 }
 
 impl Default for UiConfig {

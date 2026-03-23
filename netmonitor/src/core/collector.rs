@@ -146,12 +146,14 @@ impl Collector for AyaCollector {
     }
 }
 
+#[cfg(test)]
 pub struct MockCollector {
     stats: HashMap<u32, TrafficStats>,
     connections: HashMap<ConnectionKey, TrafficStats>,
     throttles: HashMap<u32, u64>,
 }
 
+#[cfg(test)]
 impl MockCollector {
     pub fn new() -> Self {
         Self {
@@ -166,6 +168,7 @@ impl MockCollector {
     }
 }
 
+#[cfg(test)]
 impl Collector for MockCollector {
     fn collect_stats(&mut self) -> Result<HashMap<u32, TrafficStats>> {
         Ok(self.stats.clone())

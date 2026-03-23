@@ -24,6 +24,10 @@ impl EnforcementService {
         self.thresholds.get(&pid).copied()
     }
 
+    pub fn remove_threshold(&mut self, pid: Pid) {
+        self.thresholds.remove(&pid);
+    }
+
     pub fn set_throttle(
         &mut self,
         collector: &mut dyn Collector,

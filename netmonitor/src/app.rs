@@ -1,7 +1,6 @@
 use crate::config::Config;
 use crate::core::{
-    Bytes, Collector, EnforcementService, IdentityService, MonitoringService, Pid, Resolver,
-    TrafficService,
+    Collector, MonitoringService, Resolver,
 };
 use crate::process::ProcessContext;
 use crate::theme::{Theme, ThemeType};
@@ -88,7 +87,7 @@ impl HistoricalRange {
         }
     }
 
-    pub fn to_seconds(&self) -> i64 {
+    pub fn to_seconds(self) -> i64 {
         match self {
             HistoricalRange::LastHour => 3600,
             HistoricalRange::Last4Hours => 14400,
@@ -98,7 +97,7 @@ impl HistoricalRange {
 }
 
 impl TimeRange {
-    pub fn to_seconds(&self) -> i64 {
+    pub fn to_seconds(self) -> i64 {
         match self {
             TimeRange::TenMinutes => 600,
             TimeRange::OneHour => 3600,
@@ -135,6 +134,8 @@ pub struct App<C: Collector, R: Resolver> {
     pub process_data: Vec<ProcessRow>,
     pub total_upload: u64,
     pub total_download: u64,
+    pub session_upload: u64,
+    pub session_download: u64,
     pub table_state: TableState,
     pub sort_column: Column,
     pub sort_desc: bool,
@@ -153,8 +154,6 @@ pub struct App<C: Collector, R: Resolver> {
     pub current_theme_type: ThemeType,
     pub threshold_input: String,
     pub throttle_input: String,
-    pub thresholds: HashMap<u32, u64>, // PID -> KB/s
-    pub throttles: HashMap<u32, u64>,  // PID -> KB/s
     pub alerts: VecDeque<Alert>,
     pub graph_time_range: TimeRange,
     pub graph_series: Vec<GraphSeries>,
@@ -220,6 +219,8 @@ impl<C: Collector, R: Resolver> App<C, R> {
             process_data: Vec::new(),
             total_upload: 0,
             total_download: 0,
+            session_upload: 0,
+            session_download: 0,
             table_state: TableState::default(),
             sort_column: Column::Up,
             sort_desc: true,
@@ -238,8 +239,6 @@ impl<C: Collector, R: Resolver> App<C, R> {
             current_theme_type,
             threshold_input: String::new(),
             throttle_input: String::new(),
-            thresholds: HashMap::new(), // Per-process thresholds could be loaded here too
-            throttles: HashMap::new(),  // PID -> KB/s
             alerts: VecDeque::with_capacity(MAX_HISTORY),
             graph_time_range: TimeRange::TenMinutes,
             graph_series: Vec::new(),

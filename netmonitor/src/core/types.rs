@@ -14,11 +14,11 @@ impl fmt::Display for Pid {
 pub struct Bytes(pub u64);
 
 impl Bytes {
-    pub fn to_kb(&self) -> f64 {
+    pub fn to_kb(self) -> f64 {
         self.0 as f64 / 1024.0
     }
 
-    pub fn to_mb(&self) -> f64 {
+    pub fn to_mb(self) -> f64 {
         self.0 as f64 / (1024.0 * 1024.0)
     }
 }

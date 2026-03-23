@@ -3,7 +3,7 @@ use crate::core::domain::{ConnectionSummary, MonitoringSnapshot, ProcessSummary}
 use crate::core::error::Result;
 use crate::core::services::identity::Resolver;
 use crate::core::services::{EnforcementService, IdentityService, TrafficService};
-use crate::core::types::{Bytes, Pid};
+use crate::core::types::Bytes;
 use crate::dns;
 use crate::geoip;
 use crate::protocol;
@@ -38,6 +38,7 @@ impl<C: Collector, R: Resolver> MonitoringService<C, R> {
         let mut processes = Vec::new();
         for (pid, stats) in self.traffic.get_stats() {
             let info = self.identity.get_info(*pid);
+            let (up_rate, down_rate) = self.traffic.get_process_rates(*pid);
             processes.push(ProcessSummary {
                 pid: *pid,
                 name: info.name,
@@ -45,8 +46,8 @@ impl<C: Collector, R: Resolver> MonitoringService<C, R> {
                 up: Bytes(stats.bytes_sent),
                 down: Bytes(stats.bytes_recv),
                 total: Bytes(stats.bytes_sent + stats.bytes_recv),
-                up_rate: Bytes(0),
-                down_rate: Bytes(0),
+                up_rate,
+                down_rate,
             });
         }
 
@@ -121,6 +122,8 @@ impl<C: Collector, R: Resolver> MonitoringService<C, R> {
             connections,
             total_up: self.traffic.total_upload(),
             total_down: self.traffic.total_download(),
+            session_up: self.traffic.session_upload(),
+            session_down: self.traffic.session_download(),
             protocol_stats,
             country_stats,
         })

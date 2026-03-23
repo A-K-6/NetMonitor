@@ -9,6 +9,7 @@ pub struct ProcessSummary {
     pub context: ProcessContext,
     pub up: Bytes,
     pub down: Bytes,
+    #[allow(dead_code)]
     pub total: Bytes,
     pub up_rate: Bytes, // Per second
     pub down_rate: Bytes,
@@ -36,6 +37,8 @@ pub struct MonitoringSnapshot {
     pub connections: HashMap<u32, Vec<ConnectionSummary>>,
     pub total_up: Bytes,
     pub total_down: Bytes,
+    pub session_up: Bytes,
+    pub session_down: Bytes,
     pub protocol_stats: HashMap<u32, (Bytes, Bytes)>,
     pub country_stats: HashMap<String, (Bytes, Bytes)>,
 }

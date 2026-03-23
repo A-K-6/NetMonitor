@@ -2,6 +2,7 @@ use crate::core::types::Pid;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum NetMonitorError {
     #[error("BPF error: {0}")]
     BpfError(#[from] aya::EbpfError),

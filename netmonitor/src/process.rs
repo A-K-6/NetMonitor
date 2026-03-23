@@ -88,7 +88,7 @@ impl ProcessResolver {
                     })
                     .map(|s| {
                         // Extract just the file name from the path
-                        s.split('/').last().unwrap_or(&s).to_string()
+                        s.split('/').next_back().unwrap_or(&s).to_string()
                     })
             })
     }
@@ -118,7 +118,7 @@ impl ProcessResolver {
 
                     // Docker containers
                     if path.contains("/docker/") {
-                        if let Some(id) = path.split('/').last() {
+                        if let Some(id) = path.split('/').next_back() {
                             return ProcessContext::Docker(id.to_string());
                         }
                     }
