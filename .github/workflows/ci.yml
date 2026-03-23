@@ -32,5 +32,13 @@ jobs:
       - name: Install bpf-linker
         run: cargo install bpf-linker
 
-      - name: Run verify (xtask)
+      - name: Run Fast Checks (Push)
+        if: github.event_name == 'push'
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test --workspace
+
+      - name: Run Full Verification (Pull Request)
+        if: github.event_name == 'pull_request'
         run: cargo xtask verify
