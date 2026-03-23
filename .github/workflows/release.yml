@@ -23,7 +23,10 @@ jobs:
           sudo apt-get install -y llvm clang libcap-dev libelf-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          # Automatically uses rust-toolchain.toml
+          components: rustfmt, clippy
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2

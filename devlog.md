@@ -1,3 +1,8 @@
+2026-03-23 18:15 - Fixed CI/CD Toolchain Conflict.
+- Updated `rust-toolchain.toml` to include `rustfmt` and `clippy` components for nightly.
+- Reconfigured `.github/workflows/ci.yml` and `release.yml` to use the project's toolchain file instead of forcing stable.
+- Verified `cargo xtask verify` passes locally with nightly components.
+
 2026-03-23 17:30 - Completed Task 034: CI/CD Pipeline & Automated Packaging.
 - Established GitHub Actions workflow (`ci.yml`) for automated linting, clippy, and workspace testing.
 - Integrated `cargo xtask verify` into CI to ensure eBPF/userspace build and accuracy verification on clean environments.
