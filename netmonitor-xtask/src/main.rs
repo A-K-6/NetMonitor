@@ -132,6 +132,9 @@ fn install() -> Result<()> {
 }
 
 fn verify() -> Result<()> {
+    println!("--- 0. Building eBPF Bytecode (Required for Linting/Embedding) ---");
+    build_ebpf(true)?;
+
     println!("--- 1. Linting (fmt & clippy) ---");
     let status = Command::new("cargo").args(["fmt", "--check"]).status()?;
     if !status.success() {
@@ -153,8 +156,6 @@ fn verify() -> Result<()> {
     }
 
     println!("--- 3. Accuracy Verification (Isolated Namespace) ---");
-    // Build eBPF (Fast incremental)
-    build_ebpf(true)?;
     // Ensure binary is built for script to use
     let status = Command::new("cargo")
         .args(["build", "--package", "netmonitor", "--release"])
