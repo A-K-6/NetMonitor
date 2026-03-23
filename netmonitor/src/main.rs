@@ -15,7 +15,8 @@ use caps::{has_cap, CapSet, Capability};
 use chrono::Utc;
 use clap::Parser;
 use config::Config;
-use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
+use core::Collector;
+use crossterm::event::{Event, KeyCode, MouseButton, MouseEventKind};
 use db::DbManager;
 use log::{error, info};
 use ratatui::layout::{Direction, Layout, Margin, Rect};
@@ -29,6 +30,14 @@ struct Args {
     /// Path to configuration file
     #[arg(short, long)]
     config: Option<PathBuf>,
+
+    /// Run in headless mode (no TUI)
+    #[arg(long)]
+    headless: bool,
+
+    /// Verify traffic accuracy in a temporary network namespace
+    #[arg(long)]
+    verify_accuracy: bool,
 }
 
 fn check_caps() -> Result<(), anyhow::Error> {
@@ -84,6 +93,36 @@ async fn main() -> Result<(), anyhow::Error> {
     let identity_service = core::services::IdentityService::new(resolver);
     let monitoring = core::services::MonitoringService::new(collector, identity_service);
 
+    if args.headless {
+        println!("NetMonitor running in headless mode.");
+        let mut app = App::new(monitoring, historical_data, config);
+
+        if args.verify_accuracy {
+            println!("Verification mode active. Monitoring for 3 seconds...");
+            let start = Instant::now();
+            while start.elapsed() < Duration::from_secs(3) {
+                app.monitoring.collector.collect_stats()?;
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            // Report stats for 'nc' or other processes
+            let stats = app.monitoring.collector.collect_stats()?;
+            for (pid, stat) in stats {
+                if stat.bytes_sent > 0 || stat.bytes_recv > 0 {
+                    println!(
+                        "PID {}: Sent {} bytes, Recv {} bytes",
+                        pid, stat.bytes_sent, stat.bytes_recv
+                    );
+                }
+            }
+            return Ok(());
+        }
+
+        // Just run until interrupted
+        tokio::signal::ctrl_c().await?;
+        println!("Headless mode exiting.");
+        return Ok(());
+    }
+
     let mut terminal = tui::Tui::new()?;
     let mut app = App::new(monitoring, historical_data, config);
 
@@ -117,427 +156,90 @@ async fn main() -> Result<(), anyhow::Error> {
                     // Clear status message on any key press
                     app.status_message = None;
 
-                    if app.show_help {
-                        match key.code {
-                            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
-                                app.show_help = false;
-                            }
-                            _ => {}
-                        }
-                    } else if app.show_alerts {
-                        match key.code {
-                            KeyCode::Esc | KeyCode::Char('A') | KeyCode::Char('q') => {
-                                app.show_alerts = false;
-                            }
-                            _ => {}
-                        }
-                    } else if app.show_historical_dialog {
-                        match key.code {
-                            KeyCode::Up => app.previous_historical_range(),
-                            KeyCode::Down => app.next_historical_range(),
-                            KeyCode::Enter => {
-                                if let Some(i) = app.historical_range_state.selected() {
-                                    let ranges = HistoricalRange::all();
-                                    if let Some(range) = ranges.get(i) {
-                                        let end = Utc::now();
-                                        let start =
-                                            end - chrono::Duration::seconds(range.to_seconds());
+                    if app.show_historical_dialog && key.code == KeyCode::Enter {
+                        if let Some(i) = app.historical_range_state.selected() {
+                            let ranges = HistoricalRange::all();
+                            if let Some(range) = ranges.get(i) {
+                                let end = Utc::now();
+                                let start = end - chrono::Duration::seconds(range.to_seconds());
 
-                                        match db.get_aggregated_stats(start, end) {
-                                            Ok(stats) => {
-                                                app.historical_data = stats.into_values().collect();
-                                                app.historical_view_mode = true;
-                                                app.historical_start_time = Some(start);
-                                                app.historical_end_time = Some(end);
-                                                app.status_message = Some(format!(
-                                                    "Historical View: {}",
-                                                    range.label()
-                                                ));
-                                                app.sort_data();
-                                            }
-                                            Err(e) => {
-                                                app.status_message =
-                                                    Some(format!("Error fetching stats: {}", e));
-                                            }
-                                        }
+                                match db.get_aggregated_stats(start, end) {
+                                    Ok(stats) => {
+                                        app.historical_data = stats.into_values().collect();
+                                        app.historical_view_mode = true;
+                                        app.historical_start_time = Some(start);
+                                        app.historical_end_time = Some(end);
+                                        app.status_message =
+                                            Some(format!("Historical View: {}", range.label()));
+                                        app.sort_data();
+                                    }
+                                    Err(e) => {
+                                        app.status_message =
+                                            Some(format!("Error fetching stats: {}", e));
                                     }
                                 }
-                                app.show_historical_dialog = false;
                             }
-                            KeyCode::Esc | KeyCode::Char('H') => {
-                                app.show_historical_dialog = false;
-                            }
-                            _ => {}
                         }
-                    } else if app.show_threshold_dialog {
-                        match key.code {
-                            KeyCode::Char(c) if c.is_ascii_digit() => {
-                                app.threshold_input.push(c);
-                            }
-                            KeyCode::Backspace => {
-                                app.threshold_input.pop();
-                            }
-                            KeyCode::Enter => {
-                                if let Some(i) = app.table_state.selected() {
-                                    if let Some(row) = app.process_data.get(i) {
-                                        if let Ok(val) = app.threshold_input.parse::<u64>() {
-                                            if val > 0 {
-                                                app.monitoring.enforcement.set_threshold(core::Pid(row.pid), val);
-                                                app.status_message = Some(format!(
-                                                    "Set threshold for {} to {} KB/s",
-                                                    row.name, val
-                                                ));
-                                            } else {
-                                                app.monitoring.enforcement.remove_threshold(core::Pid(row.pid));
-                                                app.status_message = Some(format!(
-                                                    "Removed threshold for {}",
-                                                    row.name
-                                                ));
-                                            }
-                                        }
-                                    }
-                                }
-                                app.show_threshold_dialog = false;
-                                app.threshold_input.clear();
-                            }
-                            KeyCode::Esc => {
-                                app.show_threshold_dialog = false;
-                                app.threshold_input.clear();
-                            }
-                            _ => {}
+                        app.show_historical_dialog = false;
+                    } else if (app.show_graph && key.code == KeyCode::Tab)
+                        || (!app.show_graph && key.code == KeyCode::Char('g'))
+                    {
+                        if key.code == KeyCode::Tab {
+                            app.graph_time_range = match app.graph_time_range {
+                                TimeRange::TenMinutes => TimeRange::OneHour,
+                                TimeRange::OneHour => TimeRange::TwentyFourHours,
+                                TimeRange::TwentyFourHours => TimeRange::TenMinutes,
+                            };
+                        } else {
+                            app.show_graph = true;
                         }
-                    } else if app.show_throttle_dialog {
-                        match key.code {
-                            KeyCode::Char(c) if c.is_ascii_digit() => {
-                                app.throttle_input.push(c);
-                            }
-                            KeyCode::Backspace => {
-                                app.throttle_input.pop();
-                            }
-                            KeyCode::Enter => {
-                                if let Some(i) = app.table_state.selected() {
-                                    if let Some(row) = app.process_data.get(i) {
-                                        if let Ok(val) = app.throttle_input.parse::<u64>() {
-                                            if val > 0 {
-                                                // Update eBPF map
-                                                let _ = app.monitoring.enforcement.set_throttle(
-                                                    &mut app.monitoring.collector,
-                                                    core::Pid(row.pid),
-                                                    val,
-                                                );
-                                                app.status_message = Some(format!(
-                                                    "Throttled {} to {} KB/s",
-                                                    row.name, val
-                                                ));
-                                            } else {
-                                                let _ = app.monitoring.enforcement.clear_throttle(
-                                                    &mut app.monitoring.collector,
-                                                    core::Pid(row.pid),
-                                                );
-                                                app.status_message = Some(format!(
-                                                    "Removed throttle for {}",
-                                                    row.name
-                                                ));
-                                            }
-                                        }
-                                    }
-                                }
-                                app.show_throttle_dialog = false;
-                                app.throttle_input.clear();
-                            }
-                            KeyCode::Esc => {
-                                app.show_throttle_dialog = false;
-                                app.throttle_input.clear();
-                            }
-                            _ => {}
-                        }
-                    } else if app.show_theme_dialog {
-                        match key.code {
-                            KeyCode::Up => app.previous_theme(),
-                            KeyCode::Down => app.next_theme(),
-                            KeyCode::Enter => {
-                                app.apply_theme();
-                                app.show_theme_dialog = false;
-                            }
-                            KeyCode::Esc | KeyCode::Char('t') => {
-                                app.show_theme_dialog = false;
-                            }
-                            _ => {}
-                        }
-                    } else if app.is_filtering {
-                        match key.code {
-                            KeyCode::Char(c) => {
-                                app.filter_text.push(c);
-                            }
-                            KeyCode::Backspace => {
-                                app.filter_text.pop();
-                            }
-                            KeyCode::Esc | KeyCode::Enter => {
-                                app.is_filtering = false;
-                            }
-                            _ => {}
-                        }
-                    } else if app.show_kill_dialog {
-                        match key.code {
-                            KeyCode::Char('y') => {
-                                if let Some(i) = app.table_state.selected() {
-                                    if let Some(row) = app.process_data.get(i) {
-                                        unsafe {
-                                            if libc::kill(row.pid as libc::pid_t, libc::SIGKILL)
-                                                == 0
-                                            {
-                                                app.status_message =
-                                                    Some(format!("Killed PID {}", row.pid));
-                                            } else {
-                                                app.status_message =
-                                                    Some(format!("Failed to kill PID {}", row.pid));
-                                            }
-                                        }
-                                    }
-                                }
-                                app.show_kill_dialog = false;
-                            }
-                            KeyCode::Char('n') | KeyCode::Esc => {
-                                app.show_kill_dialog = false;
-                            }
-                            _ => {}
-                        }
-                    } else if app.show_graph {
-                        match key.code {
-                            KeyCode::Esc | KeyCode::Char('g') | KeyCode::Char('q') => {
-                                app.show_graph = false;
-                            }
-                            KeyCode::Char('l') => {
-                                app.graph_scale_log = !app.graph_scale_log;
-                            }
-                            KeyCode::Tab => {
-                                app.graph_time_range = match app.graph_time_range {
-                                    TimeRange::TenMinutes => TimeRange::OneHour,
-                                    TimeRange::OneHour => TimeRange::TwentyFourHours,
-                                    TimeRange::TwentyFourHours => TimeRange::TenMinutes,
-                                };
-                                // Refetch data for all selected PIDs
-                                app.graph_series.clear();
-                                let mut pids_to_fetch =
-                                    app.selected_pids.iter().cloned().collect::<Vec<_>>();
-                                if pids_to_fetch.is_empty() {
-                                    if let Some(i) = app.table_state.selected() {
-                                        if let Some(row) = app.process_data.get(i) {
-                                            pids_to_fetch.push(row.pid);
-                                        }
-                                    }
-                                }
 
-                                for pid in pids_to_fetch {
-                                    if let Ok(history) =
-                                        db.get_traffic_history(pid, app.graph_time_range)
-                                    {
-                                        let name = app
-                                            .process_history
-                                            .get(&pid)
-                                            .map(|p| p.name.clone())
-                                            .unwrap_or_else(|| "unknown".to_string());
-                                        let start_ts = (Utc::now()
-                                            - chrono::Duration::seconds(
-                                                app.graph_time_range.to_seconds(),
-                                            ))
-                                        .timestamp()
-                                            as f64;
-
-                                        app.graph_series.push(app::GraphSeries {
-                                            pid,
-                                            name,
-                                            data_up: history
-                                                .iter()
-                                                .map(|(dt, up, _)| {
-                                                    (
-                                                        dt.timestamp() as f64 - start_ts,
-                                                        *up as f64 / 1024.0,
-                                                    )
-                                                })
-                                                .collect(),
-                                            data_down: history
-                                                .iter()
-                                                .map(|(dt, _, down)| {
-                                                    (
-                                                        dt.timestamp() as f64 - start_ts,
-                                                        *down as f64 / 1024.0,
-                                                    )
-                                                })
-                                                .collect(),
-                                        });
-                                    }
+                        // Fetch data for all selected PIDs
+                        app.graph_series.clear();
+                        let mut pids_to_fetch =
+                            app.selected_pids.iter().cloned().collect::<Vec<_>>();
+                        if pids_to_fetch.is_empty() {
+                            if let Some(i) = app.table_state.selected() {
+                                if let Some(row) = app.process_data.get(i) {
+                                    pids_to_fetch.push(row.pid);
                                 }
                             }
-                            _ => {}
+                        }
+
+                        for pid in pids_to_fetch {
+                            if let Ok(history) = db.get_traffic_history(pid, app.graph_time_range) {
+                                let name = app
+                                    .process_history
+                                    .get(&pid)
+                                    .map(|p| p.name.clone())
+                                    .unwrap_or_else(|| "unknown".to_string());
+                                let start_ts = (Utc::now()
+                                    - chrono::Duration::seconds(app.graph_time_range.to_seconds()))
+                                .timestamp() as f64;
+
+                                app.graph_series.push(app::GraphSeries {
+                                    pid,
+                                    name,
+                                    data_up: history
+                                        .iter()
+                                        .map(|(dt, up, _)| {
+                                            (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)
+                                        })
+                                        .collect(),
+                                    data_down: history
+                                        .iter()
+                                        .map(|(dt, _, down)| {
+                                            (
+                                                dt.timestamp() as f64 - start_ts,
+                                                *down as f64 / 1024.0,
+                                            )
+                                        })
+                                        .collect(),
+                                });
+                            }
                         }
                     } else {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => {
-                                if app.historical_view_mode {
-                                    app.historical_view_mode = false;
-                                    app.status_message = Some("Exited Historical View".to_string());
-                                } else {
-                                    app.is_running = false;
-                                }
-                            }
-                            KeyCode::Char(' ')
-                                if app.view_mode == app::ViewMode::ProcessTable => {
-                                    if let Some(i) = app.table_state.selected() {
-                                        if let Some(row) = app.process_data.get(i) {
-                                            if app.selected_pids.contains(&row.pid) {
-                                                app.selected_pids.remove(&row.pid);
-                                            } else {
-                                                app.selected_pids.insert(row.pid);
-                                            }
-                                        }
-                                    }
-                                }
-                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                                app.is_running = false;
-                            }
-                            KeyCode::Char('H') => {
-                                if app.historical_view_mode {
-                                    app.historical_view_mode = false;
-                                    app.status_message = Some("Exited Historical View".to_string());
-                                } else {
-                                    app.show_historical_dialog = true;
-                                }
-                            }
-                            KeyCode::Char('/') | KeyCode::Char('f') => {
-                                app.is_filtering = true;
-                            }
-                            KeyCode::Down => app.next(),
-                            KeyCode::Up => app.previous(),
-                            KeyCode::Enter => {
-                                app.show_detail = !app.show_detail;
-                            }
-                            KeyCode::Char('g') => {
-                                app.show_graph = true;
-                                // Fetch data for all selected PIDs
-                                app.graph_series.clear();
-                                let mut pids_to_fetch =
-                                    app.selected_pids.iter().cloned().collect::<Vec<_>>();
-                                if pids_to_fetch.is_empty() {
-                                    if let Some(i) = app.table_state.selected() {
-                                        if let Some(row) = app.process_data.get(i) {
-                                            pids_to_fetch.push(row.pid);
-                                        }
-                                    }
-                                }
-
-                                for pid in pids_to_fetch {
-                                    if let Ok(history) =
-                                        db.get_traffic_history(pid, app.graph_time_range)
-                                    {
-                                        let name = app
-                                            .process_history
-                                            .get(&pid)
-                                            .map(|p| p.name.clone())
-                                            .unwrap_or_else(|| "unknown".to_string());
-                                        let start_ts = (Utc::now()
-                                            - chrono::Duration::seconds(
-                                                app.graph_time_range.to_seconds(),
-                                            ))
-                                        .timestamp()
-                                            as f64;
-
-                                        app.graph_series.push(app::GraphSeries {
-                                            pid,
-                                            name,
-                                            data_up: history
-                                                .iter()
-                                                .map(|(dt, up, _)| {
-                                                    (
-                                                        dt.timestamp() as f64 - start_ts,
-                                                        *up as f64 / 1024.0,
-                                                    )
-                                                })
-                                                .collect(),
-                                            data_down: history
-                                                .iter()
-                                                .map(|(dt, _, down)| {
-                                                    (
-                                                        dt.timestamp() as f64 - start_ts,
-                                                        *down as f64 / 1024.0,
-                                                    )
-                                                })
-                                                .collect(),
-                                        });
-                                    }
-                                }
-                            }
-                            KeyCode::Char('k')
-                                if app.table_state.selected().is_some() => {
-                                    app.show_kill_dialog = true;
-                                }
-                            KeyCode::Char('s') => {
-                                // Cycle sort columns
-                                let next_col = match app.sort_column {
-                                    Column::Pid => Column::Name,
-                                    Column::Name => Column::Context,
-                                    Column::Context => Column::Up,
-                                    Column::Up => Column::Down,
-                                    Column::Down => Column::Total,
-                                    Column::Total => Column::Pid,
-                                };
-                                app.toggle_sort(next_col);
-                            }
-                            KeyCode::Char('c') => {
-                                app.show_context = !app.show_context;
-                                app.status_message = Some(format!(
-                                    "Context view: {}",
-                                    if app.show_context {
-                                        "Enabled"
-                                    } else {
-                                        "Disabled"
-                                    }
-                                ));
-                            }
-                            KeyCode::Char('?') | KeyCode::Char('h') => {
-                                app.show_help = true;
-                            }
-                            KeyCode::Char('a')
-                                if app.table_state.selected().is_some() => {
-                                    app.show_threshold_dialog = true;
-                                    app.threshold_input.clear();
-                                }
-                            KeyCode::Char('b')
-                                if app.table_state.selected().is_some() => {
-                                    app.show_throttle_dialog = true;
-                                    app.throttle_input.clear();
-                                }
-                            KeyCode::Char('A') => {
-                                app.show_alerts = !app.show_alerts;
-                            }
-                            KeyCode::Char('t') => {
-                                app.show_theme_dialog = !app.show_theme_dialog;
-                            }
-                            KeyCode::F(1) => {
-                                app.view_mode = app::ViewMode::Dashboard;
-                            }
-                            KeyCode::F(2) => {
-                                app.view_mode = app::ViewMode::ProcessTable;
-                            }
-                            KeyCode::F(3) => {
-                                app.view_mode = app::ViewMode::Alerts;
-                            }
-                            KeyCode::Tab => {
-                                app.view_mode = match app.view_mode {
-                                    app::ViewMode::Dashboard => app::ViewMode::ProcessTable,
-                                    app::ViewMode::ProcessTable => app::ViewMode::Alerts,
-                                    app::ViewMode::Alerts => app::ViewMode::Dashboard,
-                                };
-                            }
-                            KeyCode::BackTab => {
-                                app.view_mode = match app.view_mode {
-                                    app::ViewMode::Dashboard => app::ViewMode::Alerts,
-                                    app::ViewMode::ProcessTable => app::ViewMode::Dashboard,
-                                    app::ViewMode::Alerts => app::ViewMode::ProcessTable,
-                                };
-                            }
-                            _ => {}
-                        }
+                        app.handle_key_event(key);
                     }
                 }
                 Event::Mouse(mouse) => {
@@ -583,39 +285,38 @@ async fn main() -> Result<(), anyhow::Error> {
                                     && mouse.column < area.x + area.width
                                     && mouse.row >= area.y
                                     && mouse.row < area.y + area.height
-                                    && mouse.row == area.y + 4 {
-                                        let text = "(y)es / (n)o";
-                                        let start_x = area.x
-                                            + (area.width.saturating_sub(text.len() as u16)) / 2;
-                                        if mouse.column >= start_x && mouse.column < start_x + 5 {
-                                            if let Some(i) = app.table_state.selected() {
-                                                if let Some(row) = app.process_data.get(i) {
-                                                    unsafe {
-                                                        if libc::kill(
-                                                            row.pid as libc::pid_t,
-                                                            libc::SIGKILL,
-                                                        ) == 0
-                                                        {
-                                                            app.status_message = Some(format!(
-                                                                "Killed PID {}",
-                                                                row.pid
-                                                            ));
-                                                        } else {
-                                                            app.status_message = Some(format!(
-                                                                "Failed to kill PID {}",
-                                                                row.pid
-                                                            ));
-                                                        }
+                                    && mouse.row == area.y + 4
+                                {
+                                    let text = "(y)es / (n)o";
+                                    let start_x =
+                                        area.x + (area.width.saturating_sub(text.len() as u16)) / 2;
+                                    if mouse.column >= start_x && mouse.column < start_x + 5 {
+                                        if let Some(i) = app.table_state.selected() {
+                                            if let Some(row) = app.process_data.get(i) {
+                                                unsafe {
+                                                    if libc::kill(
+                                                        row.pid as libc::pid_t,
+                                                        libc::SIGKILL,
+                                                    ) == 0
+                                                    {
+                                                        app.status_message =
+                                                            Some(format!("Killed PID {}", row.pid));
+                                                    } else {
+                                                        app.status_message = Some(format!(
+                                                            "Failed to kill PID {}",
+                                                            row.pid
+                                                        ));
                                                     }
                                                 }
                                             }
-                                            app.show_kill_dialog = false;
-                                        } else if mouse.column >= start_x + 8
-                                            && mouse.column < start_x + 12
-                                        {
-                                            app.show_kill_dialog = false;
                                         }
+                                        app.show_kill_dialog = false;
+                                    } else if mouse.column >= start_x + 8
+                                        && mouse.column < start_x + 12
+                                    {
+                                        app.show_kill_dialog = false;
                                     }
+                                }
                             } else if !app.show_help
                                 && !app.show_alerts
                                 && !app.show_graph

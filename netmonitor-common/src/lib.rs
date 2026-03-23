@@ -32,9 +32,37 @@ pub struct ThrottleConfig {
     pub tokens: u64,
 }
 
+#[inline(always)]
+pub fn calculate_tokens(rate: u64, elapsed_ns: u64) -> u64 {
+    (rate * elapsed_ns) / 1_000_000_000
+}
+
 #[cfg(feature = "user")]
 unsafe impl aya::Pod for TrafficStats {}
 #[cfg(feature = "user")]
 unsafe impl aya::Pod for ConnectionKey {}
 #[cfg(feature = "user")]
 unsafe impl aya::Pod for ThrottleConfig {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_tokens() {
+        // 1MB/s = 1_048_576 bytes/s
+        let rate = 1_048_576;
+
+        // 1 second elapsed
+        let elapsed_ns = 1_000_000_000;
+        assert_eq!(calculate_tokens(rate, elapsed_ns), rate);
+
+        // 0.5 second elapsed
+        let elapsed_ns = 500_000_000;
+        assert_eq!(calculate_tokens(rate, elapsed_ns), rate / 2);
+
+        // 1 nanosecond elapsed (too small for 1MB/s to add a token)
+        let elapsed_ns = 1;
+        assert_eq!(calculate_tokens(rate, elapsed_ns), 0);
+    }
+}

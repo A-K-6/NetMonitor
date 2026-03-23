@@ -1,9 +1,8 @@
 use crate::config::Config;
-use crate::core::{
-    Collector, MonitoringService, Resolver,
-};
+use crate::core::{Collector, MonitoringService, Resolver};
 use crate::process::ProcessContext;
 use crate::theme::{Theme, ThemeType};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use dark_light::Mode;
 use ratatui::widgets::{ListState, TableState};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -404,5 +403,354 @@ impl<C: Collector, R: Resolver> App<C, R> {
                 ordering
             }
         });
+    }
+
+    pub fn handle_key_event(&mut self, key: KeyEvent) {
+        self.status_message = None;
+
+        if self.show_help {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+                    self.show_help = false;
+                }
+                _ => {}
+            }
+        } else if self.show_alerts {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('A') | KeyCode::Char('q') => {
+                    self.show_alerts = false;
+                }
+                _ => {}
+            }
+        } else if self.show_historical_dialog {
+            match key.code {
+                KeyCode::Up => self.previous_historical_range(),
+                KeyCode::Down => self.next_historical_range(),
+                KeyCode::Esc | KeyCode::Char('H') => {
+                    self.show_historical_dialog = false;
+                }
+                _ => {}
+            }
+        } else if self.show_threshold_dialog {
+            match key.code {
+                KeyCode::Char(c) if c.is_ascii_digit() => {
+                    self.threshold_input.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.threshold_input.pop();
+                }
+                KeyCode::Enter => {
+                    if let Some(i) = self.table_state.selected() {
+                        if let Some(row) = self.process_data.get(i) {
+                            if let Ok(val) = self.threshold_input.parse::<u64>() {
+                                if val > 0 {
+                                    self.monitoring
+                                        .enforcement
+                                        .set_threshold(crate::core::Pid(row.pid), val);
+                                    self.status_message = Some(format!(
+                                        "Set threshold for {} to {} KB/s",
+                                        row.name, val
+                                    ));
+                                } else {
+                                    self.monitoring
+                                        .enforcement
+                                        .remove_threshold(crate::core::Pid(row.pid));
+                                    self.status_message =
+                                        Some(format!("Removed threshold for {}", row.name));
+                                }
+                            }
+                        }
+                    }
+                    self.show_threshold_dialog = false;
+                    self.threshold_input.clear();
+                }
+                KeyCode::Esc => {
+                    self.show_threshold_dialog = false;
+                    self.threshold_input.clear();
+                }
+                _ => {}
+            }
+        } else if self.show_throttle_dialog {
+            match key.code {
+                KeyCode::Char(c) if c.is_ascii_digit() => {
+                    self.throttle_input.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.throttle_input.pop();
+                }
+                KeyCode::Enter => {
+                    if let Some(i) = self.table_state.selected() {
+                        if let Some(row) = self.process_data.get(i) {
+                            if let Ok(val) = self.throttle_input.parse::<u64>() {
+                                if val > 0 {
+                                    let _ = self.monitoring.enforcement.set_throttle(
+                                        &mut self.monitoring.collector,
+                                        crate::core::Pid(row.pid),
+                                        val,
+                                    );
+                                    self.status_message =
+                                        Some(format!("Throttled {} to {} KB/s", row.name, val));
+                                } else {
+                                    let _ = self.monitoring.enforcement.clear_throttle(
+                                        &mut self.monitoring.collector,
+                                        crate::core::Pid(row.pid),
+                                    );
+                                    self.status_message =
+                                        Some(format!("Removed throttle for {}", row.name));
+                                }
+                            }
+                        }
+                    }
+                    self.show_throttle_dialog = false;
+                    self.throttle_input.clear();
+                }
+                KeyCode::Esc => {
+                    self.show_throttle_dialog = false;
+                    self.throttle_input.clear();
+                }
+                _ => {}
+            }
+        } else if self.show_theme_dialog {
+            match key.code {
+                KeyCode::Up => self.previous_theme(),
+                KeyCode::Down => self.next_theme(),
+                KeyCode::Enter => {
+                    self.apply_theme();
+                    self.show_theme_dialog = false;
+                }
+                KeyCode::Esc | KeyCode::Char('t') => {
+                    self.show_theme_dialog = false;
+                }
+                _ => {}
+            }
+        } else if self.is_filtering {
+            match key.code {
+                KeyCode::Char(c) => {
+                    self.filter_text.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.filter_text.pop();
+                }
+                KeyCode::Esc | KeyCode::Enter => {
+                    self.is_filtering = false;
+                }
+                _ => {}
+            }
+        } else if self.show_kill_dialog {
+            match key.code {
+                KeyCode::Char('y') => {
+                    if let Some(i) = self.table_state.selected() {
+                        if let Some(row) = self.process_data.get(i) {
+                            unsafe {
+                                if libc::kill(row.pid as libc::pid_t, libc::SIGKILL) == 0 {
+                                    self.status_message = Some(format!("Killed PID {}", row.pid));
+                                } else {
+                                    self.status_message =
+                                        Some(format!("Failed to kill PID {}", row.pid));
+                                }
+                            }
+                        }
+                    }
+                    self.show_kill_dialog = false;
+                }
+                KeyCode::Char('n') | KeyCode::Esc => {
+                    self.show_kill_dialog = false;
+                }
+                _ => {}
+            }
+        } else if self.show_graph {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('g') | KeyCode::Char('q') => {
+                    self.show_graph = false;
+                }
+                KeyCode::Char('l') => {
+                    self.graph_scale_log = !self.graph_scale_log;
+                }
+                _ => {}
+            }
+        } else {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => {
+                    if self.historical_view_mode {
+                        self.historical_view_mode = false;
+                        self.status_message = Some("Exited Historical View".to_string());
+                    } else {
+                        self.is_running = false;
+                    }
+                }
+                KeyCode::Char(' ') if self.view_mode == ViewMode::ProcessTable => {
+                    if let Some(i) = self.table_state.selected() {
+                        if let Some(row) = self.process_data.get(i) {
+                            if self.selected_pids.contains(&row.pid) {
+                                self.selected_pids.remove(&row.pid);
+                            } else {
+                                self.selected_pids.insert(row.pid);
+                            }
+                        }
+                    }
+                }
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.is_running = false;
+                }
+                KeyCode::Char('H') => {
+                    if self.historical_view_mode {
+                        self.historical_view_mode = false;
+                        self.status_message = Some("Exited Historical View".to_string());
+                    } else {
+                        self.show_historical_dialog = true;
+                    }
+                }
+                KeyCode::Char('/') | KeyCode::Char('f') => {
+                    self.is_filtering = true;
+                }
+                KeyCode::Down => self.next(),
+                KeyCode::Up => self.previous(),
+                KeyCode::Enter => {
+                    self.show_detail = !self.show_detail;
+                }
+                KeyCode::Char('g') => {
+                    self.show_graph = true;
+                }
+                KeyCode::Char('k') if self.table_state.selected().is_some() => {
+                    self.show_kill_dialog = true;
+                }
+                KeyCode::Char('a') if self.table_state.selected().is_some() => {
+                    self.show_threshold_dialog = true;
+                    self.threshold_input.clear();
+                }
+                KeyCode::Char('b') if self.table_state.selected().is_some() => {
+                    self.show_throttle_dialog = true;
+                    self.throttle_input.clear();
+                }
+                KeyCode::Char('A') => {
+                    self.show_alerts = !self.show_alerts;
+                }
+                KeyCode::Char('t') => {
+                    self.show_theme_dialog = !self.show_theme_dialog;
+                }
+                KeyCode::F(1) => {
+                    self.view_mode = ViewMode::Dashboard;
+                }
+                KeyCode::F(2) => {
+                    self.view_mode = ViewMode::ProcessTable;
+                }
+                KeyCode::F(3) => {
+                    self.view_mode = ViewMode::Alerts;
+                }
+                KeyCode::Tab => {
+                    self.view_mode = match self.view_mode {
+                        ViewMode::Dashboard => ViewMode::ProcessTable,
+                        ViewMode::ProcessTable => ViewMode::Alerts,
+                        ViewMode::Alerts => ViewMode::Dashboard,
+                    };
+                }
+                KeyCode::BackTab => {
+                    self.view_mode = match self.view_mode {
+                        ViewMode::Dashboard => ViewMode::Alerts,
+                        ViewMode::ProcessTable => ViewMode::Dashboard,
+                        ViewMode::Alerts => ViewMode::ProcessTable,
+                    };
+                }
+                KeyCode::Char('s') => {
+                    // Cycle sort columns
+                    let next_col = match self.sort_column {
+                        Column::Pid => Column::Name,
+                        Column::Name => Column::Context,
+                        Column::Context => Column::Up,
+                        Column::Up => Column::Down,
+                        Column::Down => Column::Total,
+                        Column::Total => Column::Pid,
+                    };
+                    self.toggle_sort(next_col);
+                }
+                KeyCode::Char('c') => {
+                    self.show_context = !self.show_context;
+                    self.status_message = Some(format!(
+                        "Context view: {}",
+                        if self.show_context {
+                            "Enabled"
+                        } else {
+                            "Disabled"
+                        }
+                    ));
+                }
+                KeyCode::Char('?') | KeyCode::Char('h') => {
+                    self.show_help = true;
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::collector::MockCollector;
+    use crate::core::services::identity::MockResolver;
+    use crate::core::services::MonitoringService;
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+
+    fn create_test_app() -> App<MockCollector, MockResolver> {
+        let collector = MockCollector::new();
+        let resolver = MockResolver::new();
+        let monitoring = MonitoringService::new(
+            collector,
+            crate::core::services::IdentityService::new(resolver),
+        );
+        let config = Config::default();
+        App::new(monitoring, HashMap::new(), config)
+    }
+
+    fn key_event(code: KeyCode) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        }
+    }
+
+    #[test]
+    fn test_app_view_transitions() {
+        let mut app = create_test_app();
+        assert_eq!(app.view_mode, ViewMode::Dashboard);
+
+        app.handle_key_event(key_event(KeyCode::Tab));
+        assert_eq!(app.view_mode, ViewMode::ProcessTable);
+
+        app.handle_key_event(key_event(KeyCode::F(3)));
+        assert_eq!(app.view_mode, ViewMode::Alerts);
+    }
+
+    #[test]
+    fn test_app_dialog_toggles() {
+        let mut app = create_test_app();
+
+        app.handle_key_event(key_event(KeyCode::Char('?')));
+        assert!(app.show_help);
+
+        app.handle_key_event(key_event(KeyCode::Esc));
+        assert!(!app.show_help);
+
+        app.handle_key_event(key_event(KeyCode::Char('t')));
+        assert!(app.show_theme_dialog);
+    }
+
+    #[test]
+    fn test_app_filtering_state() {
+        let mut app = create_test_app();
+
+        app.handle_key_event(key_event(KeyCode::Char('/')));
+        assert!(app.is_filtering);
+
+        app.handle_key_event(key_event(KeyCode::Char('t')));
+        app.handle_key_event(key_event(KeyCode::Char('e')));
+        app.handle_key_event(key_event(KeyCode::Char('s')));
+        app.handle_key_event(key_event(KeyCode::Char('t')));
+        assert_eq!(app.filter_text, "test");
+
+        app.handle_key_event(key_event(KeyCode::Enter));
+        assert!(!app.is_filtering);
     }
 }

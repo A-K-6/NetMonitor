@@ -63,8 +63,8 @@ pub struct TrafficService {
     connections: HashMap<ConnectionKey, TrafficStats>,
     history_up: VecDeque<Bytes>,
     history_down: VecDeque<Bytes>,
-    total_upload: Bytes,   // Current rate (diff)
-    total_download: Bytes, // Current rate (diff)
+    total_upload: Bytes,     // Current rate (diff)
+    total_download: Bytes,   // Current rate (diff)
     session_upload: Bytes,   // Lifetime total (since app start)
     session_download: Bytes, // Lifetime total (since app start)
     max_history: usize,
@@ -93,13 +93,21 @@ impl TrafficService {
         let connections = collector.collect_connections()?;
 
         self.previous_stats = std::mem::take(&mut self.current_stats);
-        
+
         let mut total_up_diff = 0;
         let mut total_down_diff = 0;
 
         for (pid, curr) in &stats {
-            let prev_up = self.previous_stats.get(&Pid(*pid)).map(|s| s.bytes_sent).unwrap_or(0);
-            let prev_down = self.previous_stats.get(&Pid(*pid)).map(|s| s.bytes_recv).unwrap_or(0);
+            let prev_up = self
+                .previous_stats
+                .get(&Pid(*pid))
+                .map(|s| s.bytes_sent)
+                .unwrap_or(0);
+            let prev_down = self
+                .previous_stats
+                .get(&Pid(*pid))
+                .map(|s| s.bytes_recv)
+                .unwrap_or(0);
             total_up_diff += curr.bytes_sent.saturating_sub(prev_up);
             total_down_diff += curr.bytes_recv.saturating_sub(prev_down);
         }
@@ -126,9 +134,17 @@ impl TrafficService {
 
     pub fn get_process_rates(&self, pid: Pid) -> (Bytes, Bytes) {
         if let Some(curr) = self.current_stats.get(&pid) {
-            let prev_up = self.previous_stats.get(&pid).map(|s| s.bytes_sent).unwrap_or(0);
-            let prev_down = self.previous_stats.get(&pid).map(|s| s.bytes_recv).unwrap_or(0);
-            
+            let prev_up = self
+                .previous_stats
+                .get(&pid)
+                .map(|s| s.bytes_sent)
+                .unwrap_or(0);
+            let prev_down = self
+                .previous_stats
+                .get(&pid)
+                .map(|s| s.bytes_recv)
+                .unwrap_or(0);
+
             let up_diff = curr.bytes_sent.saturating_sub(prev_up);
             let down_diff = curr.bytes_recv.saturating_sub(prev_down);
 

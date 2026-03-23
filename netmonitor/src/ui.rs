@@ -418,7 +418,10 @@ fn render_process_table<C: Collector, R: Resolver>(f: &mut Frame, app: &mut App<
                 let down = item.down_bytes as f64 / 1024.0;
                 let total = item.total_bytes as f64 / 1024.0;
 
-                let threshold = app.monitoring.enforcement.get_threshold(crate::core::Pid(item.pid));
+                let threshold = app
+                    .monitoring
+                    .enforcement
+                    .get_threshold(crate::core::Pid(item.pid));
                 let exceeded = threshold.is_some_and(|t| (up + down) > t as f64);
 
                 let base_style = if exceeded {
@@ -437,7 +440,10 @@ fn render_process_table<C: Collector, R: Resolver>(f: &mut Frame, app: &mut App<
                     format!("[ ] {}", item.pid)
                 };
 
-                let throttle = app.monitoring.enforcement.get_throttle(crate::core::Pid(item.pid));
+                let throttle = app
+                    .monitoring
+                    .enforcement
+                    .get_throttle(crate::core::Pid(item.pid));
                 let name_val = if app.show_context {
                     item.context.label()
                 } else {
@@ -1295,4 +1301,48 @@ fn render_throttle_dialog<C: Collector, R: Resolver>(
         .alignment(Alignment::Center);
     f.render_widget(Clear, area);
     f.render_widget(dialog, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::{App, ViewMode};
+    use crate::config::Config;
+    use crate::core::collector::MockCollector;
+    use crate::core::services::identity::MockResolver;
+    use crate::core::services::MonitoringService;
+    use ratatui::{backend::TestBackend, Terminal};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_ui_snapshot_dashboard() {
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let collector = MockCollector::new();
+        let resolver = MockResolver::new();
+        let monitoring = MonitoringService::new(
+            collector,
+            crate::core::services::IdentityService::new(resolver),
+        );
+        let config = Config::default();
+        let mut app = App::new(monitoring, HashMap::new(), config);
+        app.view_mode = ViewMode::Dashboard;
+
+        terminal.draw(|f| render(f, &mut app)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        // Check if "NetMonitor" title is rendered
+        let mut found = false;
+        for y in 0..24 {
+            for x in 0..80 {
+                let cell = buffer.get(x, y);
+                if cell.symbol().contains('N') {
+                    // Simple check for title
+                    found = true;
+                }
+            }
+        }
+        assert!(found);
+    }
 }

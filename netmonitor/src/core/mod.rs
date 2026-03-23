@@ -1,4 +1,3 @@
-
 pub mod collector;
 pub mod domain;
 pub mod error;

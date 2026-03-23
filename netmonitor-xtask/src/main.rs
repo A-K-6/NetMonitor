@@ -23,6 +23,8 @@ enum Commands {
         #[arg(long)]
         release: bool,
     },
+    /// Run all local verifications (pre-flight)
+    Verify,
 }
 
 fn main() -> Result<()> {
@@ -35,14 +37,75 @@ fn main() -> Result<()> {
         Commands::Run { release } => {
             run(release)?;
         }
+        Commands::Verify => {
+            verify()?;
+        }
     }
 
     Ok(())
 }
 
+fn verify() -> Result<()> {
+    println!("--- 1. Linting (fmt & clippy) ---");
+    let status = Command::new("cargo").args(["fmt", "--check"]).status()?;
+    if !status.success() {
+        return Err(anyhow!("fmt check failed"));
+    }
+    let status = Command::new("cargo")
+        .args(["clippy", "--all-targets", "--", "-D", "warnings"])
+        .status()?;
+    if !status.success() {
+        return Err(anyhow!("clippy failed"));
+    }
+
+    println!("--- 2. Unit Tests (Userspace & eBPF Logic) ---");
+    let status = Command::new("cargo")
+        .args(["test", "--workspace"])
+        .status()?;
+    if !status.success() {
+        return Err(anyhow!("unit tests failed"));
+    }
+
+    println!("--- 3. Accuracy Verification (Isolated Namespace) ---");
+    // Build eBPF (Fast incremental)
+    build_ebpf(true)?;
+    // Ensure binary is built for script to use
+    let status = Command::new("cargo")
+        .args(["build", "--package", "netmonitor", "--release"])
+        .status()?;
+    if !status.success() {
+        return Err(anyhow!(
+            "failed to build netmonitor for accuracy verification"
+        ));
+    }
+
+    // Run the accuracy script with sudo
+    let status = Command::new("sudo")
+        .arg("./scripts/verify_accuracy.sh")
+        .status()?;
+    if !status.success() {
+        return Err(anyhow!("accuracy verification script failed"));
+    }
+
+    println!("--- 4. Capabilities Audit ---");
+    let bin_path = "target/release/netmonitor";
+    let output = Command::new("getcap").arg(bin_path).output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("Binary caps: {}", stdout);
+    // If we want to strictly fail if no caps are set, we could check here.
+    // But since xtask run uses sudo, it's often not set in dev.
+
+    println!("Verification PASSED.");
+    Ok(())
+}
+
 fn build_ebpf(_release: bool) -> Result<()> {
     // Check if bpf-linker is installed
-    if !Command::new("bpf-linker").arg("--version").status().is_ok() {
+    if Command::new("bpf-linker")
+        .arg("--version")
+        .status()
+        .is_err()
+    {
         return Err(anyhow!(
             "bpf-linker not found. Please install it with 'cargo install bpf-linker'"
         ));

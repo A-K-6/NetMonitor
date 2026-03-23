@@ -38,3 +38,23 @@ impl<R: Resolver> IdentityService<R> {
         self.resolver.resolve(pid)
     }
 }
+
+#[cfg(test)]
+pub struct MockResolver {}
+
+#[cfg(test)]
+impl MockResolver {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[cfg(test)]
+impl Resolver for MockResolver {
+    fn resolve(&mut self, _pid: Pid) -> ProcessInfo {
+        ProcessInfo {
+            name: "test-process".to_string(),
+            context: crate::process::ProcessContext::User("test.service".to_string()),
+        }
+    }
+}

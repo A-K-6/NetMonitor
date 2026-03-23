@@ -1,3 +1,14 @@
+2026-03-23 13:30 - Completed Task 031: Local Automated Verification & Stability Suite.
+- Implemented comprehensive unit testing for `App`, `TrafficService`, and `EnforcementService`.
+- Added property-based testing for `Config` using `proptest`.
+- Refactored `App` to include `handle_key_event` for state machine testing.
+- Extracted eBPF TBF logic into `netmonitor-common` for host-side unit testing.
+- Implemented `cargo xtask verify` to automate linting, unit tests, and accuracy verification.
+- Created `scripts/verify_accuracy.sh` for isolated network namespace traffic testing.
+- Added TUI snapshot testing using `ratatui`'s `TestBackend`.
+- Achieved zero warnings across the entire workspace.
+- Moved 031 idea document to `done/`.
+
 2026-03-23 12:00 - Proposed Task 031: Automated Testing Suite & CI/CD Pipeline.
 - Created `docs/ideas/todo/031-automated-testing-and-ci.md` to initiate Phase 4 (Stability & Testing).
 - Updated `ROADMAP.md` to mark Phase 3 as completed and Phase 4 as current.

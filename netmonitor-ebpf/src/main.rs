@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 
 use aya_ebpf::{
     helpers::{bpf_get_current_pid_tgid, bpf_ktime_get_ns, bpf_probe_read_kernel},
@@ -7,7 +7,7 @@ use aya_ebpf::{
     maps::{HashMap, LruHashMap},
     programs::{ProbeContext, RetProbeContext, SkBuffContext},
 };
-use netmonitor_common::{ConnectionKey, ThrottleConfig, TrafficStats};
+use netmonitor_common::{calculate_tokens, ConnectionKey, ThrottleConfig, TrafficStats};
 
 #[map]
 static TRAFFIC_STATS: HashMap<u32, TrafficStats> = HashMap::with_max_entries(1024, 0);
@@ -36,10 +36,7 @@ pub fn throttle_egress(ctx: SkBuffContext) -> i32 {
         unsafe {
             let elapsed_ns = now.saturating_sub((*config).last_refill_ts);
 
-            // rate is bytes/sec. elapsed_ns is nanoseconds.
-            // tokens_to_add = (rate * elapsed_ns) / 1_000_000_000
-            let rate = (*config).rate_bytes_per_sec;
-            let tokens_to_add = (rate * elapsed_ns) / 1_000_000_000;
+            let tokens_to_add = calculate_tokens((*config).rate_bytes_per_sec, elapsed_ns);
 
             if tokens_to_add > 0 {
                 (*config).tokens =
@@ -231,6 +228,7 @@ pub fn raw_recvmsg(ctx: RetProbeContext) -> u32 {
     0
 }
 
+#[cfg(all(not(test), target_arch = "bpf"))]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe { core::hint::unreachable_unchecked() }

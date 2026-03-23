@@ -49,3 +49,34 @@ impl EnforcementService {
         self.throttles.get(&pid).copied()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::collector::MockCollector;
+
+    #[test]
+    fn test_enforcement_thresholds() {
+        let mut service = EnforcementService::new();
+        let pid = Pid(1234);
+
+        service.set_threshold(pid, 1000);
+        assert_eq!(service.get_threshold(pid), Some(1000));
+
+        service.remove_threshold(pid);
+        assert_eq!(service.get_threshold(pid), None);
+    }
+
+    #[test]
+    fn test_enforcement_throttles() {
+        let mut service = EnforcementService::new();
+        let mut collector = MockCollector::new();
+        let pid = Pid(1234);
+
+        service.set_throttle(&mut collector, pid, 500).unwrap();
+        assert_eq!(service.get_throttle(pid), Some(500));
+
+        service.clear_throttle(&mut collector, pid).unwrap();
+        assert_eq!(service.get_throttle(pid), None);
+    }
+}

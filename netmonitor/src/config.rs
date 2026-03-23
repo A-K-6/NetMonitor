@@ -130,3 +130,36 @@ impl Config {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_config_resilience(ref content in ".*") {
+            // Config parser should not panic on arbitrary strings
+            let _: Result<Config, _> = toml::from_str(content);
+        }
+
+        #[test]
+        fn test_config_serialization_roundtrip(
+            refresh_rate in 100u64..10000,
+            show_graph in proptest::bool::ANY,
+            dns_res in proptest::bool::ANY,
+        ) {
+            let mut config = Config::default();
+            config.ui.refresh_rate = refresh_rate;
+            config.ui.show_graph = show_graph;
+            config.network.dns_resolution = dns_res;
+
+            let serialized = toml::to_string(&config).unwrap();
+            let deserialized: Config = toml::from_str(&serialized).unwrap();
+
+            prop_assert_eq!(deserialized.ui.refresh_rate, refresh_rate);
+            prop_assert_eq!(deserialized.ui.show_graph, show_graph);
+            prop_assert_eq!(deserialized.network.dns_resolution, dns_res);
+        }
+    }
+}

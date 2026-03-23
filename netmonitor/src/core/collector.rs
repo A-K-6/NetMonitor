@@ -197,12 +197,15 @@ mod tests {
     fn test_mock_collector() {
         let mut collector = MockCollector::new();
         let mut stats = HashMap::new();
-        stats.insert(1234, TrafficStats {
-            bytes_sent: 100,
-            packets_sent: 1,
-            bytes_recv: 200,
-            packets_recv: 2,
-        });
+        stats.insert(
+            1234,
+            TrafficStats {
+                bytes_sent: 100,
+                packets_sent: 1,
+                bytes_recv: 200,
+                packets_recv: 2,
+            },
+        );
         collector.set_mock_stats(stats.clone());
 
         let collected = collector.collect_stats().unwrap();
@@ -216,6 +219,6 @@ mod tests {
         collector.set_throttle(1234, 1000).unwrap();
         assert_eq!(collector.throttles.get(&1234).unwrap(), &1000);
         collector.clear_throttle(1234).unwrap();
-        assert!(collector.throttles.get(&1234).is_none());
+        assert!(!collector.throttles.contains_key(&1234));
     }
 }
