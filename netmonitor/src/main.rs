@@ -1,32 +1,33 @@
-mod process;
 mod app;
+mod config;
+mod core;
+mod db;
+mod dns;
+mod geoip;
+mod process;
+mod protocol;
+mod theme;
 mod tui;
 mod ui;
-mod theme;
-mod geoip;
-mod protocol;
-mod dns;
-mod db;
-mod config;
 
-use app::{App, Column, ProcessRow, TimeRange, HistoricalRange};
-use config::Config;
-use clap::Parser;
-use std::path::PathBuf;
+use app::{App, Column, HistoricalRange, ProcessRow, TimeRange};
 use aya::maps::HashMap;
-use aya::programs::{KProbe, CgroupSkb, CgroupSkbAttachType, CgroupAttachMode};
+use aya::programs::{CgroupAttachMode, CgroupSkb, CgroupSkbAttachType, KProbe};
 use aya::Ebpf;
 use aya_log::EbpfLogger;
-use caps::{CapSet, Capability, has_cap};
-use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEventKind, MouseButton};
-use netmonitor_common::{TrafficStats, ConnectionKey, ThrottleConfig};
+use caps::{has_cap, CapSet, Capability};
+use chrono::Utc;
+use clap::Parser;
+use config::Config;
+use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
+use db::DbManager;
+use log::{error, info};
+use netmonitor_common::{ConnectionKey, ThrottleConfig, TrafficStats};
 use process::ProcessResolver;
 use ratatui::layout::{Direction, Layout, Margin, Rect};
 use std::env;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use log::{error, info};
-use db::DbManager;
-use chrono::Utc;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -40,7 +41,11 @@ fn check_caps() -> Result<(), anyhow::Error> {
     let required = [Capability::CAP_BPF, Capability::CAP_NET_ADMIN];
     for &cap in &required {
         if !has_cap(None, CapSet::Effective, cap).unwrap_or(false) {
-            error!("Missing capability: {:?}. Try 'sudo setcap cap_net_admin,cap_bpf=ep {}'", cap, env::current_exe()?.display());
+            error!(
+                "Missing capability: {:?}. Try 'sudo setcap cap_net_admin,cap_bpf=ep {}'",
+                cap,
+                env::current_exe()?.display()
+            );
             return Err(anyhow::anyhow!("Insufficient permissions"));
         }
     }
@@ -67,62 +72,28 @@ async fn main() -> Result<(), anyhow::Error> {
         eprintln!("Failed to increase rlimit RLIMIT_MEMLOCK: {}", ret);
     }
 
-    // Load the BPF program
-    let mut bpf = Ebpf::load_file("target/bpfel-unknown-none/release/netmonitor-ebpf")?;
-
-    if let Err(e) = EbpfLogger::init(&mut bpf) {
-        eprintln!("failed to initialize eBPF logger: {}", e);
-    }
-
-    let program: &mut KProbe = bpf.program_mut("tcp_sendmsg").unwrap().try_into()?;
-    program.load()?;
-    program.attach("tcp_sendmsg", 0)?;
-
-    let recv_program: &mut KProbe = bpf.program_mut("tcp_cleanup_rbuf").unwrap().try_into()?;
-    recv_program.load()?;
-    recv_program.attach("tcp_cleanup_rbuf", 0)?;
-
-    // Load UDP probes
-    let udp_send: &mut KProbe = bpf.program_mut("udp_sendmsg").expect("udp_sendmsg not found").try_into()?;
-    udp_send.load()?;
-    udp_send.attach("udp_sendmsg", 0)?;
-
-    let udp_recv: &mut KProbe = bpf.program_mut("udp_recvmsg").expect("udp_recvmsg not found").try_into()?;
-    udp_recv.load()?;
-    udp_recv.attach("udp_recvmsg", 0)?;
-
-    // Load RAW probes
-    let raw_send: &mut KProbe = bpf.program_mut("raw_sendmsg").expect("raw_sendmsg not found").try_into()?;
-    raw_send.load()?;
-    raw_send.attach("raw_sendmsg", 0)?;
-
-    let raw_recv: &mut KProbe = bpf.program_mut("raw_recvmsg").expect("raw_recvmsg not found").try_into()?;
-    raw_recv.load()?;
-    raw_recv.attach("raw_recvmsg", 0)?;
-
-    // Load Traffic Shaping (Cgroup SKB)
-    let egress: &mut CgroupSkb = bpf.program_mut("throttle_egress").expect("throttle_egress not found").try_into()?;
-    egress.load()?;
-    let cgroup_file = std::fs::File::open("/sys/fs/cgroup")?;
-    egress.attach(cgroup_file, CgroupSkbAttachType::Egress, CgroupAttachMode::default())?;
-
-    let ingress: &mut CgroupSkb = bpf.program_mut("throttle_ingress").expect("throttle_ingress not found").try_into()?;
-    ingress.load()?;
-    let cgroup_file_in = std::fs::File::open("/sys/fs/cgroup")?;
-    ingress.attach(cgroup_file_in, CgroupSkbAttachType::Ingress, CgroupAttachMode::default())?;
-
-    let stats_map: HashMap<_, u32, TrafficStats> = HashMap::try_from(bpf.take_map("TRAFFIC_STATS").unwrap())?;
-    let connections_map: HashMap<_, ConnectionKey, TrafficStats> = 
-        HashMap::try_from(bpf.take_map("CONNECTIONS").unwrap())?;
-    let mut throttle_map: HashMap<_, u32, ThrottleConfig> = HashMap::try_from(bpf.take_map("THROTTLE_CONFIG").unwrap())?;
+    // Load the BPF program via AyaCollector
+    let collector = match core::collector::AyaCollector::new() {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to initialize eBPF collector: {}", e);
+            return Err(e);
+        }
+    };
 
     let mut db = DbManager::new("netmonitor.db")?;
     let historical_data = db.load_historical_stats()?;
-    info!("Loaded historical stats for {} processes", historical_data.len());
+    info!(
+        "Loaded historical stats for {} processes",
+        historical_data.len()
+    );
 
-    let mut resolver = ProcessResolver::new(Duration::from_secs(10));
+    let resolver = core::services::identity::LocalResolver::new(Duration::from_secs(10));
+    let identity_service = core::services::IdentityService::new(resolver);
+    let monitoring = core::services::MonitoringService::new(collector, identity_service);
+
     let mut terminal = tui::Tui::new()?;
-    let mut app = App::new(historical_data, config);
+    let mut app = App::new(monitoring, historical_data, config);
 
     if let Some(path) = &config_path {
         if path.exists() {
@@ -138,7 +109,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let db_flush_rate = Duration::from_secs(60);
 
     // Track deltas for DB flushing
-    let mut db_deltas: std::collections::HashMap<u32, (u64, u64)> = std::collections::HashMap::new();
+    let mut db_deltas: std::collections::HashMap<u32, (u64, u64)> =
+        std::collections::HashMap::new();
 
     while app.is_running {
         terminal.draw(|f| ui::render(f, &mut app))?;
@@ -176,19 +148,24 @@ async fn main() -> Result<(), anyhow::Error> {
                                     let ranges = HistoricalRange::all();
                                     if let Some(range) = ranges.get(i) {
                                         let end = Utc::now();
-                                        let start = end - chrono::Duration::seconds(range.to_seconds());
-                                        
+                                        let start =
+                                            end - chrono::Duration::seconds(range.to_seconds());
+
                                         match db.get_aggregated_stats(start, end) {
                                             Ok(stats) => {
                                                 app.historical_data = stats.into_values().collect();
                                                 app.historical_view_mode = true;
                                                 app.historical_start_time = Some(start);
                                                 app.historical_end_time = Some(end);
-                                                app.status_message = Some(format!("Historical View: {}", range.label()));
+                                                app.status_message = Some(format!(
+                                                    "Historical View: {}",
+                                                    range.label()
+                                                ));
                                                 app.sort_data();
                                             }
                                             Err(e) => {
-                                                app.status_message = Some(format!("Error fetching stats: {}", e));
+                                                app.status_message =
+                                                    Some(format!("Error fetching stats: {}", e));
                                             }
                                         }
                                     }
@@ -214,10 +191,16 @@ async fn main() -> Result<(), anyhow::Error> {
                                         if let Ok(val) = app.threshold_input.parse::<u64>() {
                                             if val > 0 {
                                                 app.thresholds.insert(row.pid, val);
-                                                app.status_message = Some(format!("Set threshold for {} to {} KB/s", row.name, val));
+                                                app.status_message = Some(format!(
+                                                    "Set threshold for {} to {} KB/s",
+                                                    row.name, val
+                                                ));
                                             } else {
                                                 app.thresholds.remove(&row.pid);
-                                                app.status_message = Some(format!("Removed threshold for {}", row.name));
+                                                app.status_message = Some(format!(
+                                                    "Removed threshold for {}",
+                                                    row.name
+                                                ));
                                             }
                                         }
                                     }
@@ -246,18 +229,25 @@ async fn main() -> Result<(), anyhow::Error> {
                                             if val > 0 {
                                                 app.throttles.insert(row.pid, val);
                                                 // Update eBPF map
-                                                let config = ThrottleConfig {
-                                                    rate_bytes_per_sec: val * 1024,
-                                                    bucket_size: val * 1024 * 2, // 2 seconds burst
-                                                    last_refill_ts: 0,
-                                                    tokens: val * 1024 * 2,
-                                                };
-                                                let _ = throttle_map.insert(&row.pid, &config, 0);
-                                                app.status_message = Some(format!("Throttled {} to {} KB/s", row.name, val));
+                                                let _ = app.monitoring.enforcement.set_throttle(
+                                                    &mut app.monitoring.collector,
+                                                    core::Pid(row.pid),
+                                                    val,
+                                                );
+                                                app.status_message = Some(format!(
+                                                    "Throttled {} to {} KB/s",
+                                                    row.name, val
+                                                ));
                                             } else {
                                                 app.throttles.remove(&row.pid);
-                                                let _ = throttle_map.remove(&row.pid);
-                                                app.status_message = Some(format!("Removed throttle for {}", row.name));
+                                                let _ = app.monitoring.enforcement.clear_throttle(
+                                                    &mut app.monitoring.collector,
+                                                    core::Pid(row.pid),
+                                                );
+                                                app.status_message = Some(format!(
+                                                    "Removed throttle for {}",
+                                                    row.name
+                                                ));
                                             }
                                         }
                                     }
@@ -303,10 +293,14 @@ async fn main() -> Result<(), anyhow::Error> {
                                 if let Some(i) = app.table_state.selected() {
                                     if let Some(row) = app.process_data.get(i) {
                                         unsafe {
-                                            if libc::kill(row.pid as libc::pid_t, libc::SIGKILL) == 0 {
-                                                app.status_message = Some(format!("Killed PID {}", row.pid));
+                                            if libc::kill(row.pid as libc::pid_t, libc::SIGKILL)
+                                                == 0
+                                            {
+                                                app.status_message =
+                                                    Some(format!("Killed PID {}", row.pid));
                                             } else {
-                                                app.status_message = Some(format!("Failed to kill PID {}", row.pid));
+                                                app.status_message =
+                                                    Some(format!("Failed to kill PID {}", row.pid));
                                             }
                                         }
                                     }
@@ -334,7 +328,8 @@ async fn main() -> Result<(), anyhow::Error> {
                                 };
                                 // Refetch data for all selected PIDs
                                 app.graph_series.clear();
-                                let mut pids_to_fetch = app.selected_pids.iter().cloned().collect::<Vec<_>>();
+                                let mut pids_to_fetch =
+                                    app.selected_pids.iter().cloned().collect::<Vec<_>>();
                                 if pids_to_fetch.is_empty() {
                                     if let Some(i) = app.table_state.selected() {
                                         if let Some(row) = app.process_data.get(i) {
@@ -344,15 +339,42 @@ async fn main() -> Result<(), anyhow::Error> {
                                 }
 
                                 for pid in pids_to_fetch {
-                                    if let Ok(history) = db.get_traffic_history(pid, app.graph_time_range) {
-                                        let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
-                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                        
+                                    if let Ok(history) =
+                                        db.get_traffic_history(pid, app.graph_time_range)
+                                    {
+                                        let name = app
+                                            .process_history
+                                            .get(&pid)
+                                            .map(|p| p.name.clone())
+                                            .unwrap_or_else(|| "unknown".to_string());
+                                        let start_ts = (Utc::now()
+                                            - chrono::Duration::seconds(
+                                                app.graph_time_range.to_seconds(),
+                                            ))
+                                        .timestamp()
+                                            as f64;
+
                                         app.graph_series.push(app::GraphSeries {
                                             pid,
                                             name,
-                                            data_up: history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect(),
-                                            data_down: history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect(),
+                                            data_up: history
+                                                .iter()
+                                                .map(|(dt, up, _)| {
+                                                    (
+                                                        dt.timestamp() as f64 - start_ts,
+                                                        *up as f64 / 1024.0,
+                                                    )
+                                                })
+                                                .collect(),
+                                            data_down: history
+                                                .iter()
+                                                .map(|(dt, _, down)| {
+                                                    (
+                                                        dt.timestamp() as f64 - start_ts,
+                                                        *down as f64 / 1024.0,
+                                                    )
+                                                })
+                                                .collect(),
                                         });
                                     }
                                 }
@@ -405,7 +427,8 @@ async fn main() -> Result<(), anyhow::Error> {
                                 app.show_graph = true;
                                 // Fetch data for all selected PIDs
                                 app.graph_series.clear();
-                                let mut pids_to_fetch = app.selected_pids.iter().cloned().collect::<Vec<_>>();
+                                let mut pids_to_fetch =
+                                    app.selected_pids.iter().cloned().collect::<Vec<_>>();
                                 if pids_to_fetch.is_empty() {
                                     if let Some(i) = app.table_state.selected() {
                                         if let Some(row) = app.process_data.get(i) {
@@ -415,15 +438,42 @@ async fn main() -> Result<(), anyhow::Error> {
                                 }
 
                                 for pid in pids_to_fetch {
-                                    if let Ok(history) = db.get_traffic_history(pid, app.graph_time_range) {
-                                        let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
-                                        let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                        
+                                    if let Ok(history) =
+                                        db.get_traffic_history(pid, app.graph_time_range)
+                                    {
+                                        let name = app
+                                            .process_history
+                                            .get(&pid)
+                                            .map(|p| p.name.clone())
+                                            .unwrap_or_else(|| "unknown".to_string());
+                                        let start_ts = (Utc::now()
+                                            - chrono::Duration::seconds(
+                                                app.graph_time_range.to_seconds(),
+                                            ))
+                                        .timestamp()
+                                            as f64;
+
                                         app.graph_series.push(app::GraphSeries {
                                             pid,
                                             name,
-                                            data_up: history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect(),
-                                            data_down: history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect(),
+                                            data_up: history
+                                                .iter()
+                                                .map(|(dt, up, _)| {
+                                                    (
+                                                        dt.timestamp() as f64 - start_ts,
+                                                        *up as f64 / 1024.0,
+                                                    )
+                                                })
+                                                .collect(),
+                                            data_down: history
+                                                .iter()
+                                                .map(|(dt, _, down)| {
+                                                    (
+                                                        dt.timestamp() as f64 - start_ts,
+                                                        *down as f64 / 1024.0,
+                                                    )
+                                                })
+                                                .collect(),
                                         });
                                     }
                                 }
@@ -447,7 +497,14 @@ async fn main() -> Result<(), anyhow::Error> {
                             }
                             KeyCode::Char('c') => {
                                 app.show_context = !app.show_context;
-                                app.status_message = Some(format!("Context view: {}", if app.show_context { "Enabled" } else { "Disabled" }));
+                                app.status_message = Some(format!(
+                                    "Context view: {}",
+                                    if app.show_context {
+                                        "Enabled"
+                                    } else {
+                                        "Disabled"
+                                    }
+                                ));
                             }
                             KeyCode::Char('?') | KeyCode::Char('h') => {
                                 app.show_help = true;
@@ -516,12 +573,18 @@ async fn main() -> Result<(), anyhow::Error> {
                         MouseEventKind::Down(MouseButton::Left) => {
                             app.status_message = None;
                             let size = terminal.size().unwrap_or_default();
-                            
+
                             if app.show_theme_dialog {
                                 let area = ui::centered_rect(30, 40, size);
-                                if mouse.column >= area.x && mouse.column < area.x + area.width && mouse.row >= area.y && mouse.row < area.y + area.height {
+                                if mouse.column >= area.x
+                                    && mouse.column < area.x + area.width
+                                    && mouse.row >= area.y
+                                    && mouse.row < area.y + area.height
+                                {
                                     let content_y = area.y + 1;
-                                    if mouse.row >= content_y && mouse.row < area.y + area.height - 1 {
+                                    if mouse.row >= content_y
+                                        && mouse.row < area.y + area.height - 1
+                                    {
                                         let idx = (mouse.row - content_y) as usize;
                                         if idx < theme::ThemeType::all().len() {
                                             app.theme_state.select(Some(idx));
@@ -530,32 +593,57 @@ async fn main() -> Result<(), anyhow::Error> {
                                 }
                             } else if app.show_kill_dialog {
                                 let area = ui::centered_rect(60, 20, size);
-                                if mouse.column >= area.x && mouse.column < area.x + area.width && mouse.row >= area.y && mouse.row < area.y + area.height {
+                                if mouse.column >= area.x
+                                    && mouse.column < area.x + area.width
+                                    && mouse.row >= area.y
+                                    && mouse.row < area.y + area.height
+                                {
                                     if mouse.row == area.y + 4 {
                                         let text = "(y)es / (n)o";
-                                        let start_x = area.x + (area.width.saturating_sub(text.len() as u16)) / 2;
+                                        let start_x = area.x
+                                            + (area.width.saturating_sub(text.len() as u16)) / 2;
                                         if mouse.column >= start_x && mouse.column < start_x + 5 {
                                             if let Some(i) = app.table_state.selected() {
                                                 if let Some(row) = app.process_data.get(i) {
                                                     unsafe {
-                                                        if libc::kill(row.pid as libc::pid_t, libc::SIGKILL) == 0 {
-                                                            app.status_message = Some(format!("Killed PID {}", row.pid));
+                                                        if libc::kill(
+                                                            row.pid as libc::pid_t,
+                                                            libc::SIGKILL,
+                                                        ) == 0
+                                                        {
+                                                            app.status_message = Some(format!(
+                                                                "Killed PID {}",
+                                                                row.pid
+                                                            ));
                                                         } else {
-                                                            app.status_message = Some(format!("Failed to kill PID {}", row.pid));
+                                                            app.status_message = Some(format!(
+                                                                "Failed to kill PID {}",
+                                                                row.pid
+                                                            ));
                                                         }
                                                     }
                                                 }
                                             }
                                             app.show_kill_dialog = false;
-                                        } else if mouse.column >= start_x + 8 && mouse.column < start_x + 12 {
+                                        } else if mouse.column >= start_x + 8
+                                            && mouse.column < start_x + 12
+                                        {
                                             app.show_kill_dialog = false;
                                         }
                                     }
                                 }
-                            } else if !app.show_help && !app.show_alerts && !app.show_graph && !app.show_threshold_dialog && !app.show_throttle_dialog && !app.show_detail {
+                            } else if !app.show_help
+                                && !app.show_alerts
+                                && !app.show_graph
+                                && !app.show_threshold_dialog
+                                && !app.show_throttle_dialog
+                                && !app.show_detail
+                            {
                                 // Check Tab click
                                 let tab_rect = Rect::new(0, 3, size.width, 3);
-                                if mouse.row >= tab_rect.y && mouse.row < tab_rect.y + tab_rect.height {
+                                if mouse.row >= tab_rect.y
+                                    && mouse.row < tab_rect.y + tab_rect.height
+                                {
                                     let tab_width = size.width / 3;
                                     if mouse.column < tab_width {
                                         app.view_mode = app::ViewMode::Dashboard;
@@ -566,25 +654,45 @@ async fn main() -> Result<(), anyhow::Error> {
                                     }
                                 } else if app.view_mode == app::ViewMode::ProcessTable {
                                     let table_rect = ui::get_table_rect(size, app.is_filtering);
-                                    if mouse.column >= table_rect.x && mouse.column < table_rect.x + table_rect.width && mouse.row >= table_rect.y && mouse.row < table_rect.y + table_rect.height {
+                                    if mouse.column >= table_rect.x
+                                        && mouse.column < table_rect.x + table_rect.width
+                                        && mouse.row >= table_rect.y
+                                        && mouse.row < table_rect.y + table_rect.height
+                                    {
                                         if mouse.row == table_rect.y + 1 {
                                             // Header clicked
-                                            let inner_rect = table_rect.inner(&Margin { vertical: 1, horizontal: 1 });
+                                            let inner_rect = table_rect.inner(&Margin {
+                                                vertical: 1,
+                                                horizontal: 1,
+                                            });
                                             let content_x = inner_rect.x + 3; // Shift by ">> " symbol
                                             let content_width = inner_rect.width.saturating_sub(3);
-                                            let content_rect = Rect::new(content_x, inner_rect.y, content_width, 1);
-                                            
+                                            let content_rect = Rect::new(
+                                                content_x,
+                                                inner_rect.y,
+                                                content_width,
+                                                1,
+                                            );
+
                                             let widths = ui::get_column_widths(size);
                                             let col_rects = Layout::default()
                                                 .direction(Direction::Horizontal)
                                                 .constraints(widths)
                                                 .split(content_rect);
-                                            
+
                                             for (i, col_rect) in col_rects.iter().enumerate() {
-                                                if mouse.column >= col_rect.x && mouse.column < col_rect.x + col_rect.width {
+                                                if mouse.column >= col_rect.x
+                                                    && mouse.column < col_rect.x + col_rect.width
+                                                {
                                                     let col = match i {
                                                         0 => Column::Pid,
-                                                        1 => if app.show_context { Column::Context } else { Column::Name },
+                                                        1 => {
+                                                            if app.show_context {
+                                                                Column::Context
+                                                            } else {
+                                                                Column::Name
+                                                            }
+                                                        }
                                                         2 => Column::Up,
                                                         3 => Column::Down,
                                                         _ => Column::Total,
@@ -595,9 +703,12 @@ async fn main() -> Result<(), anyhow::Error> {
                                             }
                                         } else {
                                             let content_y = table_rect.y + 3; // border + header
-                                            if mouse.row >= content_y && mouse.row < table_rect.y + table_rect.height - 1 {
+                                            if mouse.row >= content_y
+                                                && mouse.row < table_rect.y + table_rect.height - 1
+                                            {
                                                 let offset = app.table_state.offset();
-                                                let row_idx = (mouse.row - content_y) as usize + offset;
+                                                let row_idx =
+                                                    (mouse.row - content_y) as usize + offset;
                                                 if row_idx < app.process_data.len() {
                                                     app.table_state.select(Some(row_idx));
                                                 }
@@ -606,11 +717,22 @@ async fn main() -> Result<(), anyhow::Error> {
                                     }
                                 }
                             }
-                            
+
                             // Check Footer click (only if no dialog is open)
-                            if !app.show_help && !app.show_alerts && !app.show_kill_dialog && !app.show_graph && !app.show_threshold_dialog && !app.show_throttle_dialog && !app.show_detail && !app.show_theme_dialog && !app.show_historical_dialog {
+                            if !app.show_help
+                                && !app.show_alerts
+                                && !app.show_kill_dialog
+                                && !app.show_graph
+                                && !app.show_threshold_dialog
+                                && !app.show_throttle_dialog
+                                && !app.show_detail
+                                && !app.show_theme_dialog
+                                && !app.show_historical_dialog
+                            {
                                 let footer_rect = ui::get_footer_rect(size);
-                                if mouse.row >= footer_rect.y && mouse.row < footer_rect.y + footer_rect.height {
+                                if mouse.row >= footer_rect.y
+                                    && mouse.row < footer_rect.y + footer_rect.height
+                                {
                                     let text = if app.historical_view_mode {
                                         "q/Esc/H: Exit Historical | s: Sort | /: Filter | Enter: Details | ?: Help".to_string()
                                     } else {
@@ -620,13 +742,17 @@ async fn main() -> Result<(), anyhow::Error> {
                                             app::ViewMode::Alerts => "Tab/F1-F3: Switch | q: Quit | t: Theme | ?: Help".to_string(),
                                         }
                                     };
-                                    let start_x = footer_rect.x + (footer_rect.width.saturating_sub(text.len() as u16)) / 2;
-                                    
+                                    let start_x = footer_rect.x
+                                        + (footer_rect.width.saturating_sub(text.len() as u16)) / 2;
+
                                     if app.historical_view_mode {
                                         if mouse.column >= start_x && mouse.column < start_x + 9 {
                                             app.historical_view_mode = false;
-                                            app.status_message = Some("Exited Historical View".to_string());
-                                        } else if mouse.column >= start_x + 12 && mouse.column < start_x + 19 {
+                                            app.status_message =
+                                                Some("Exited Historical View".to_string());
+                                        } else if mouse.column >= start_x + 12
+                                            && mouse.column < start_x + 19
+                                        {
                                             let next_col = match app.sort_column {
                                                 Column::Pid => Column::Name,
                                                 Column::Name => Column::Context,
@@ -636,44 +762,70 @@ async fn main() -> Result<(), anyhow::Error> {
                                                 Column::Total => Column::Pid,
                                             };
                                             app.toggle_sort(next_col);
-                                        } else if mouse.column >= start_x + 22 && mouse.column < start_x + 31 {
+                                        } else if mouse.column >= start_x + 22
+                                            && mouse.column < start_x + 31
+                                        {
                                             app.is_filtering = true;
                                             app.filter_text.clear();
-                                        } else if mouse.column >= start_x + 34 && mouse.column < start_x + 48 {
+                                        } else if mouse.column >= start_x + 34
+                                            && mouse.column < start_x + 48
+                                        {
                                             if app.table_state.selected().is_some() {
                                                 app.show_detail = true;
                                             }
-                                        } else if mouse.column >= start_x + 51 && mouse.column < start_x + 58 {
+                                        } else if mouse.column >= start_x + 51
+                                            && mouse.column < start_x + 58
+                                        {
                                             app.show_help = true;
                                         }
                                     } else {
                                         match app.view_mode {
                                             app::ViewMode::Dashboard | app::ViewMode::Alerts => {
-                                                if mouse.column >= start_x && mouse.column < start_x + 15 {
+                                                if mouse.column >= start_x
+                                                    && mouse.column < start_x + 15
+                                                {
                                                     // Toggle View via Tab logic (or just cycle)
                                                     app.view_mode = match app.view_mode {
-                                                        app::ViewMode::Dashboard => app::ViewMode::ProcessTable,
-                                                        app::ViewMode::Alerts => app::ViewMode::Dashboard,
+                                                        app::ViewMode::Dashboard => {
+                                                            app::ViewMode::ProcessTable
+                                                        }
+                                                        app::ViewMode::Alerts => {
+                                                            app::ViewMode::Dashboard
+                                                        }
                                                         _ => app::ViewMode::Dashboard,
                                                     };
-                                                } else if mouse.column >= start_x + 18 && mouse.column < start_x + 25 {
+                                                } else if mouse.column >= start_x + 18
+                                                    && mouse.column < start_x + 25
+                                                {
                                                     return Ok(());
-                                                } else if mouse.column >= start_x + 28 && mouse.column < start_x + 36 {
+                                                } else if mouse.column >= start_x + 28
+                                                    && mouse.column < start_x + 36
+                                                {
                                                     app.show_theme_dialog = !app.show_theme_dialog;
-                                                } else if mouse.column >= start_x + 39 && mouse.column < start_x + 46 {
+                                                } else if mouse.column >= start_x + 39
+                                                    && mouse.column < start_x + 46
+                                                {
                                                     app.show_help = true;
                                                 }
                                             }
                                             app::ViewMode::ProcessTable => {
-                                                if mouse.column >= start_x && mouse.column < start_x + 15 {
+                                                if mouse.column >= start_x
+                                                    && mouse.column < start_x + 15
+                                                {
                                                     app.view_mode = app::ViewMode::Alerts;
-                                                } else if mouse.column >= start_x + 18 && mouse.column < start_x + 25 {
+                                                } else if mouse.column >= start_x + 18
+                                                    && mouse.column < start_x + 25
+                                                {
                                                     return Ok(());
-                                                } else if mouse.column >= start_x + 28 && mouse.column < start_x + 35 {
+                                                } else if mouse.column >= start_x + 28
+                                                    && mouse.column < start_x + 35
+                                                {
                                                     if app.table_state.selected().is_some() {
                                                         app.show_kill_dialog = true;
                                                     }
-                                                } else if mouse.column >= start_x + 38 && mouse.column < start_x + 45 {
+                                                } else if mouse.column >= start_x + 38
+                                                    && mouse.column < start_x + 45
+                                                {
                                                     let next_col = match app.sort_column {
                                                         Column::Pid => Column::Name,
                                                         Column::Name => Column::Context,
@@ -683,51 +835,111 @@ async fn main() -> Result<(), anyhow::Error> {
                                                         Column::Total => Column::Pid,
                                                     };
                                                     app.toggle_sort(next_col);
-                                                } else if mouse.column >= start_x + 48 && mouse.column < start_x + 59 {
+                                                } else if mouse.column >= start_x + 48
+                                                    && mouse.column < start_x + 59
+                                                {
                                                     if app.table_state.selected().is_some() {
                                                         app.show_throttle_dialog = true;
                                                         app.throttle_input.clear();
                                                     }
-                                                } else if mouse.column >= start_x + 62 && mouse.column < start_x + 71 {
+                                                } else if mouse.column >= start_x + 62
+                                                    && mouse.column < start_x + 71
+                                                {
                                                     app.is_filtering = true;
                                                     app.filter_text.clear();
-                                                } else if mouse.column >= start_x + 74 && mouse.column < start_x + 88 {
+                                                } else if mouse.column >= start_x + 74
+                                                    && mouse.column < start_x + 88
+                                                {
                                                     if app.table_state.selected().is_some() {
                                                         app.show_detail = true;
                                                     }
-                                                } else if mouse.column >= start_x + 91 && mouse.column < start_x + 99 {
+                                                } else if mouse.column >= start_x + 91
+                                                    && mouse.column < start_x + 99
+                                                {
                                                     if let Some(i) = app.table_state.selected() {
                                                         if let Some(row) = app.process_data.get(i) {
                                                             app.show_graph = true;
                                                             app.graph_series.clear();
-                                                            let mut pids_to_fetch = app.selected_pids.iter().cloned().collect::<Vec<_>>();
+                                                            let mut pids_to_fetch = app
+                                                                .selected_pids
+                                                                .iter()
+                                                                .cloned()
+                                                                .collect::<Vec<_>>();
                                                             if pids_to_fetch.is_empty() {
                                                                 pids_to_fetch.push(row.pid);
                                                             }
                                                             for pid in pids_to_fetch {
-                                                                if let Ok(history) = db.get_traffic_history(pid, app.graph_time_range) {
-                                                                    let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
-                                                                    let start_ts = (Utc::now() - chrono::Duration::seconds(app.graph_time_range.to_seconds())).timestamp() as f64;
-                                                                    app.graph_series.push(app::GraphSeries {
+                                                                if let Ok(history) = db
+                                                                    .get_traffic_history(
+                                                                        pid,
+                                                                        app.graph_time_range,
+                                                                    )
+                                                                {
+                                                                    let name = app
+                                                                        .process_history
+                                                                        .get(&pid)
+                                                                        .map(|p| p.name.clone())
+                                                                        .unwrap_or_else(|| {
+                                                                            "unknown".to_string()
+                                                                        });
+                                                                    let start_ts = (Utc::now()
+                                                                        - chrono::Duration::seconds(
+                                                                            app.graph_time_range
+                                                                                .to_seconds(),
+                                                                        ))
+                                                                    .timestamp()
+                                                                        as f64;
+                                                                    app.graph_series
+                                                                        .push(app::GraphSeries {
                                                                         pid,
                                                                         name,
-                                                                        data_up: history.iter().map(|(dt, up, _)| (dt.timestamp() as f64 - start_ts, *up as f64 / 1024.0)).collect(),
-                                                                        data_down: history.iter().map(|(dt, _, down)| (dt.timestamp() as f64 - start_ts, *down as f64 / 1024.0)).collect(),
+                                                                        data_up: history
+                                                                            .iter()
+                                                                            .map(|(dt, up, _)| {
+                                                                                (
+                                                                                    dt.timestamp()
+                                                                                        as f64
+                                                                                        - start_ts,
+                                                                                    *up as f64
+                                                                                        / 1024.0,
+                                                                                )
+                                                                            })
+                                                                            .collect(),
+                                                                        data_down: history
+                                                                            .iter()
+                                                                            .map(|(dt, _, down)| {
+                                                                                (
+                                                                                    dt.timestamp()
+                                                                                        as f64
+                                                                                        - start_ts,
+                                                                                    *down as f64
+                                                                                        / 1024.0,
+                                                                                )
+                                                                            })
+                                                                            .collect(),
                                                                     });
                                                                 }
                                                             }
                                                         }
                                                     }
-                                                } else if mouse.column >= start_x + 102 && mouse.column < start_x + 112 {
+                                                } else if mouse.column >= start_x + 102
+                                                    && mouse.column < start_x + 112
+                                                {
                                                     app.show_historical_dialog = true;
-                                                } else if mouse.column >= start_x + 115 && mouse.column < start_x + 123 {
+                                                } else if mouse.column >= start_x + 115
+                                                    && mouse.column < start_x + 123
+                                                {
                                                     if app.table_state.selected().is_some() {
                                                         app.show_threshold_dialog = true;
                                                         app.threshold_input.clear();
                                                     }
-                                                } else if mouse.column >= start_x + 126 && mouse.column < start_x + 134 {
+                                                } else if mouse.column >= start_x + 126
+                                                    && mouse.column < start_x + 134
+                                                {
                                                     app.show_theme_dialog = !app.show_theme_dialog;
-                                                } else if mouse.column >= start_x + 137 && mouse.column < start_x + 144 {
+                                                } else if mouse.column >= start_x + 137
+                                                    && mouse.column < start_x + 144
+                                                {
                                                     app.show_help = true;
                                                 }
                                             }
@@ -735,7 +947,6 @@ async fn main() -> Result<(), anyhow::Error> {
                                     }
                                 }
                             }
-
                         }
                         _ => {}
                     }
@@ -745,71 +956,109 @@ async fn main() -> Result<(), anyhow::Error> {
         }
 
         if last_tick.elapsed() >= tick_rate {
-            let mut current_total_up = 0;
-            let mut current_total_down = 0;
+            match app.monitoring.snapshot(
+                app.config.network.dns_resolution,
+                app.config.network.geo_ip_enabled,
+            ) {
+                Ok(snapshot) => {
+                    app.total_upload = snapshot.total_up.0;
+                    app.total_download = snapshot.total_down.0;
 
-            // Update stats
-            for result in stats_map.iter() {
-                if let Ok((pid, stats)) = result {
-                    let info = resolver.get_process_info(pid);
-                    let hist = app.process_history.entry(pid).or_insert(ProcessRow {
-                        pid,
-                        name: info.name.clone(),
-                        context: info.context.clone(),
-                        up_bytes: 0,
-                        down_bytes: 0,
-                        total_bytes: 0,
-                        last_up_bytes: 0,
-                        last_down_bytes: 0,
-                    });
-
-                    if hist.name == "unknown" && info.name != "unknown" {
-                        hist.name = info.name;
-                    }
-                    
-                    if hist.context == crate::process::ProcessContext::Unknown && info.context != crate::process::ProcessContext::Unknown {
-                        hist.context = info.context;
+                    // Update global history for graphs
+                    app.history_up.push_back(snapshot.total_up.0);
+                    app.history_down.push_back(snapshot.total_down.0);
+                    if app.history_up.len() > app::MAX_HISTORY {
+                        app.history_up.pop_front();
+                        app.history_down.pop_front();
                     }
 
-                    let up_delta = stats.bytes_sent.saturating_sub(hist.last_up_bytes);
-                    let down_delta = stats.bytes_recv.saturating_sub(hist.last_down_bytes);
+                    for proc in snapshot.processes {
+                        let hist =
+                            app.process_history
+                                .entry(proc.pid.0)
+                                .or_insert(app::ProcessRow {
+                                    pid: proc.pid.0,
+                                    name: proc.name.clone(),
+                                    context: proc.context.clone(),
+                                    up_bytes: 0,
+                                    down_bytes: 0,
+                                    total_bytes: 0,
+                                    last_up_bytes: 0,
+                                    last_down_bytes: 0,
+                                });
 
-                    hist.up_bytes = up_delta;
-                    hist.down_bytes = down_delta;
-                    hist.total_bytes += up_delta + down_delta;
-                    
-                    hist.last_up_bytes = stats.bytes_sent;
-                    hist.last_down_bytes = stats.bytes_recv;
+                        let up_delta = proc.up.0.saturating_sub(hist.last_up_bytes);
+                        let down_delta = proc.down.0.saturating_sub(hist.last_down_bytes);
 
-                    current_total_up += up_delta;
-                    current_total_down += down_delta;
+                        hist.up_bytes = up_delta;
+                        hist.down_bytes = down_delta;
+                        hist.total_bytes += up_delta + down_delta;
+                        hist.last_up_bytes = proc.up.0;
+                        hist.last_down_bytes = proc.down.0;
 
-                    // Update deltas for DB
-                    let entry = db_deltas.entry(pid).or_insert((0, 0));
-                    entry.0 += up_delta;
-                    entry.1 += down_delta;
+                        // Update deltas for DB
+                        let entry = db_deltas.entry(proc.pid.0).or_insert((0, 0));
+                        entry.0 += up_delta;
+                        entry.1 += down_delta;
 
-                    // Alert check
-                    let threshold = app.thresholds.get(&pid).cloned()
-                        .or_else(|| app.config.alerts.processes.get(&hist.name).cloned())
-                        .unwrap_or(app.config.alerts.default_threshold);
+                        // Alert check
+                        let threshold = app
+                            .thresholds
+                            .get(&proc.pid.0)
+                            .cloned()
+                            .or_else(|| app.config.alerts.processes.get(&hist.name).cloned())
+                            .unwrap_or(app.config.alerts.default_threshold);
 
-                    let current_rate = (up_delta + down_delta) / 1024; // KB/s (assuming 1Hz)
-                    if current_rate > threshold && threshold > 0 {
-                        let alert = app::Alert {
-                            timestamp: Utc::now(),
-                            pid,
-                            process_name: hist.name.clone(),
-                            value: current_rate,
-                            threshold,
-                        };
-                        app.alerts.push_back(alert);
-                        if app.alerts.len() > app::MAX_HISTORY {
-                            app.alerts.pop_front();
+                        let current_rate = (up_delta + down_delta) / 1024;
+                        if current_rate > threshold && threshold > 0 {
+                            app.alerts.push_back(app::Alert {
+                                timestamp: Utc::now(),
+                                pid: proc.pid.0,
+                                process_name: hist.name.clone(),
+                                value: current_rate,
+                                threshold,
+                            });
+                            if app.alerts.len() > app::MAX_HISTORY {
+                                app.alerts.pop_front();
+                            }
                         }
-                        app.status_message = Some(format!("ALERT: {} exceeded threshold!", hist.name));
+                    }
+
+                    app.protocol_stats = snapshot
+                        .protocol_stats
+                        .into_iter()
+                        .map(|(k, v)| (k, (v.0 .0, v.1 .0)))
+                        .collect();
+                    app.country_stats = snapshot
+                        .country_stats
+                        .into_iter()
+                        .map(|(k, v)| (k, (v.0 .0, v.1 .0)))
+                        .collect();
+
+                    app.connections.clear();
+                    for (pid, conns) in snapshot.connections {
+                        app.connections.insert(
+                            pid,
+                            conns
+                                .into_iter()
+                                .map(|c| app::ConnectionInfo {
+                                    proto: c.proto,
+                                    src_ip: c.src_ip,
+                                    src_port: c.src_port,
+                                    dst_ip: c.dst_ip,
+                                    dst_port: c.dst_port,
+                                    up_bytes: c.up.0,
+                                    down_bytes: c.down.0,
+                                    country: c.country,
+                                    isp: c.isp,
+                                    hostname: c.hostname,
+                                    service: c.service,
+                                })
+                                .collect(),
+                        );
                     }
                 }
+                Err(e) => error!("Snapshot failed: {}", e),
             }
 
             // Periodic DB Flush
@@ -817,7 +1066,11 @@ async fn main() -> Result<(), anyhow::Error> {
                 let mut batch = Vec::new();
                 for (pid, (up, down)) in db_deltas.drain() {
                     if up > 0 || down > 0 {
-                        let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
+                        let name = app
+                            .process_history
+                            .get(&pid)
+                            .map(|p| p.name.clone())
+                            .unwrap_or_else(|| "unknown".to_string());
                         batch.push((pid, name, up, down));
                     }
                 }
@@ -829,85 +1082,22 @@ async fn main() -> Result<(), anyhow::Error> {
                 last_db_flush = Instant::now();
             }
 
-            // Update connections
-            if !app.historical_view_mode {
-                app.connections.clear();
-                app.protocol_stats.clear();
-                app.country_stats.clear();
-                for result in connections_map.iter() {
-                    if let Ok((key, stats)) = result {
-                        use std::net::{Ipv4Addr, IpAddr};
-                        let dst_addr = Ipv4Addr::from(u32::from_be(key.dst_ip));
-                        let src_ip = Ipv4Addr::from(u32::from_be(key.src_ip)).to_string();
-                        let dst_ip_addr = IpAddr::V4(dst_addr);
-                        let dst_ip = dst_addr.to_string();
-                        
-                        let (country, isp) = if app.config.network.geo_ip_enabled {
-                            geoip::RESOLVER.resolve(dst_ip_addr)
-                        } else {
-                            ("Disabled".to_string(), "Disabled".to_string())
-                        };
-                        let service = protocol::RESOLVER.resolve(key.proto, key.dst_port);
-                        
-                        // Aggregate protocol/country stats
-                        let p_stats = app.protocol_stats.entry(key.proto).or_insert((0, 0));
-                        p_stats.0 += stats.bytes_sent;
-                        p_stats.1 += stats.bytes_recv;
-
-                        let c_stats = app.country_stats.entry(country.clone()).or_insert((0, 0));
-                        c_stats.0 += stats.bytes_sent;
-                        c_stats.1 += stats.bytes_recv;
-
-                        // Get cached hostname or trigger resolution
-                        let hostname = if app.config.network.dns_resolution {
-                            match dns::RESOLVER.get_cached(dst_ip_addr) {
-                                Some(h) => h,
-                                None => {
-                                    // Spawn background resolution if not in cache
-                                    tokio::spawn(async move {
-                                        dns::RESOLVER.resolve(dst_ip_addr).await;
-                                    });
-                                    None
-                                }
-                            }
-                        } else {
-                            None
-                        };
-
-                        let conn_info = app::ConnectionInfo {
-                            proto: key.proto,
-                            src_ip,
-                            src_port: key.src_port,
-                            dst_ip,
-                            dst_port: key.dst_port,
-                            up_bytes: stats.bytes_sent,
-                            down_bytes: stats.bytes_recv,
-                            country,
-                            isp,
-                            hostname,
-                            service,
-                        };
-                        app.connections.entry(key.pid).or_default().push(conn_info);
-                    }
-                }
-            }
-
-            // 2. Clear current process_data and populate from history/historical_data with filter
+            // Populate process_data for UI (filtering)
             app.process_data.clear();
             let filter_lower = app.filter_text.to_lowercase();
 
             if app.historical_view_mode {
                 for row in &app.historical_data {
-                    if app.filter_text.is_empty() 
+                    if app.filter_text.is_empty()
                         || row.name.to_lowercase().contains(&filter_lower)
-                        || row.context.label().to_lowercase().contains(&filter_lower) 
+                        || row.context.label().to_lowercase().contains(&filter_lower)
                     {
                         app.process_data.push(row.clone());
                     }
                 }
             } else {
                 for row in app.process_history.values() {
-                    if app.filter_text.is_empty() 
+                    if app.filter_text.is_empty()
                         || row.name.to_lowercase().contains(&filter_lower)
                         || row.context.label().to_lowercase().contains(&filter_lower)
                     {
@@ -916,20 +1106,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 }
             }
 
-            if !app.historical_view_mode {
-                app.total_upload = current_total_up;
-                app.total_download = current_total_down;
-
-                // Update global history
-                app.history_up.push_back(current_total_up);
-                app.history_down.push_back(current_total_down);
-                if app.history_up.len() > app::MAX_HISTORY {
-                    app.history_up.pop_front();
-                    app.history_down.pop_front();
-                }
-            } else {
-                // In historical mode, total_upload/download for the header
-                // will reflect the sum of the filtered historical data
+            if app.historical_view_mode {
                 app.total_upload = app.process_data.iter().map(|p| p.up_bytes).sum();
                 app.total_download = app.process_data.iter().map(|p| p.down_bytes).sum();
             }
@@ -943,7 +1120,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut batch = Vec::new();
     for (pid, (up, down)) in db_deltas.drain() {
         if up > 0 || down > 0 {
-            let name = app.process_history.get(&pid).map(|p| p.name.clone()).unwrap_or_else(|| "unknown".to_string());
+            let name = app
+                .process_history
+                .get(&pid)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "unknown".to_string());
             batch.push((pid, name, up, down));
         }
     }

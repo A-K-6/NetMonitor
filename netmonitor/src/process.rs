@@ -54,14 +54,16 @@ impl ProcessResolver {
         }
 
         // Cache miss or expired
-        let name = self.resolve_pid(pid).unwrap_or_else(|| "unknown".to_string());
+        let name = self
+            .resolve_pid(pid)
+            .unwrap_or_else(|| "unknown".to_string());
         let context = self.resolve_context(pid);
-        
+
         let info = ProcessInfo {
             name: name.clone(),
             context: context.clone(),
         };
-        
+
         self.cache.insert(pid, (info, now));
         ProcessInfo { name, context }
     }
@@ -100,7 +102,9 @@ impl ProcessResolver {
                 let parts: Vec<&str> = line.split(':').collect();
                 if parts.len() >= 3 {
                     let path = parts[2];
-                    if path == "/" { continue; }
+                    if path == "/" {
+                        continue;
+                    }
 
                     // Systemd services
                     if path.contains(".service") {

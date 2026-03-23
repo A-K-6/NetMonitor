@@ -10,12 +10,12 @@ pub struct TrafficStats {
     pub packets_recv: u64,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(C)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ConnectionKey {
     pub pid: u32,
-    pub proto: u32,  // Using u32 for protocol to maintain alignment
+    pub proto: u32, // Using u32 for protocol to maintain alignment
     pub src_ip: u32,
     pub dst_ip: u32,
     pub src_port: u16,

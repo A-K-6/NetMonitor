@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
 use ratatui::style::Color;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ThemeType {
@@ -56,21 +56,19 @@ pub struct Theme {
 impl Theme {
     pub fn from_type(theme_type: ThemeType) -> Self {
         match theme_type {
-            ThemeType::Auto => {
-                Self::from_type(ThemeType::Default)
-            }
+            ThemeType::Auto => Self::from_type(ThemeType::Default),
             ThemeType::Terminal => Theme {
                 bg: Color::Reset,
-                header_fg: Color::Indexed(6), // Cyan
-                row_fg: Color::Reset,         // Default FG
+                header_fg: Color::Indexed(6),    // Cyan
+                row_fg: Color::Reset,            // Default FG
                 highlight_fg: Color::Indexed(0), // Black
                 highlight_bg: Color::Indexed(7), // White
-                border_fg: Color::Indexed(8),  // Gray
-                alert_fg: Color::Indexed(1),   // Red
-                upload_fg: Color::Indexed(2),  // Green
-                download_fg: Color::Indexed(3), // Yellow
-                status_fg: Color::Indexed(8),  // Gray
-                help_fg: Color::Indexed(5),    // Magenta
+                border_fg: Color::Indexed(8),    // Gray
+                alert_fg: Color::Indexed(1),     // Red
+                upload_fg: Color::Indexed(2),    // Green
+                download_fg: Color::Indexed(3),  // Yellow
+                status_fg: Color::Indexed(8),    // Gray
+                help_fg: Color::Indexed(5),      // Magenta
             },
             ThemeType::Default => Theme {
                 bg: Color::Reset,
@@ -87,39 +85,39 @@ impl Theme {
             },
             ThemeType::Dracula => Theme {
                 bg: Color::Rgb(40, 42, 54),
-                header_fg: Color::Rgb(189, 147, 249), // Purple
-                row_fg: Color::Rgb(248, 248, 242),    // Foreground
-                highlight_fg: Color::Rgb(40, 42, 54), // Background
+                header_fg: Color::Rgb(189, 147, 249),   // Purple
+                row_fg: Color::Rgb(248, 248, 242),      // Foreground
+                highlight_fg: Color::Rgb(40, 42, 54),   // Background
                 highlight_bg: Color::Rgb(98, 114, 164), // Selection
-                border_fg: Color::Rgb(68, 71, 90),     // Comment
+                border_fg: Color::Rgb(68, 71, 90),      // Comment
                 alert_fg: Color::Rgb(255, 85, 85),      // Red
-                upload_fg: Color::Rgb(80, 250, 123),   // Green
+                upload_fg: Color::Rgb(80, 250, 123),    // Green
                 download_fg: Color::Rgb(241, 250, 140), // Yellow
                 status_fg: Color::Rgb(98, 114, 164),    // Comment
                 help_fg: Color::Rgb(255, 121, 198),     // Pink
             },
             ThemeType::Solarized => Theme {
-                bg: Color::Rgb(0, 43, 54),             // Base03
-                header_fg: Color::Rgb(38, 139, 210),   // Blue
-                row_fg: Color::Rgb(131, 148, 150),     // Content
+                bg: Color::Rgb(0, 43, 54),               // Base03
+                header_fg: Color::Rgb(38, 139, 210),     // Blue
+                row_fg: Color::Rgb(131, 148, 150),       // Content
                 highlight_fg: Color::Rgb(253, 246, 227), // Base3
-                highlight_bg: Color::Rgb(7, 54, 66),    // Base02
-                border_fg: Color::Rgb(88, 110, 117),   // Base01
-                alert_fg: Color::Rgb(220, 50, 47),      // Red
-                upload_fg: Color::Rgb(133, 153, 0),     // Green
-                download_fg: Color::Rgb(181, 137, 0),   // Yellow
-                status_fg: Color::Rgb(101, 123, 131),   // Base00
-                help_fg: Color::Rgb(211, 54, 130),     // Magenta
+                highlight_bg: Color::Rgb(7, 54, 66),     // Base02
+                border_fg: Color::Rgb(88, 110, 117),     // Base01
+                alert_fg: Color::Rgb(220, 50, 47),       // Red
+                upload_fg: Color::Rgb(133, 153, 0),      // Green
+                download_fg: Color::Rgb(181, 137, 0),    // Yellow
+                status_fg: Color::Rgb(101, 123, 131),    // Base00
+                help_fg: Color::Rgb(211, 54, 130),       // Magenta
             },
             ThemeType::Monokai => Theme {
                 bg: Color::Rgb(39, 40, 34),
-                header_fg: Color::Rgb(102, 217, 239), // Cyan
-                row_fg: Color::Rgb(248, 248, 242),    // White
-                highlight_fg: Color::Rgb(39, 40, 34),  // Blackish
+                header_fg: Color::Rgb(102, 217, 239),   // Cyan
+                row_fg: Color::Rgb(248, 248, 242),      // White
+                highlight_fg: Color::Rgb(39, 40, 34),   // Blackish
                 highlight_bg: Color::Rgb(166, 226, 46), // Green
-                border_fg: Color::Rgb(117, 113, 94),   // Gray
+                border_fg: Color::Rgb(117, 113, 94),    // Gray
                 alert_fg: Color::Rgb(249, 38, 114),     // Pink/Red
-                upload_fg: Color::Rgb(166, 226, 46),   // Green
+                upload_fg: Color::Rgb(166, 226, 46),    // Green
                 download_fg: Color::Rgb(230, 219, 116), // Yellow
                 status_fg: Color::Rgb(117, 113, 94),    // Gray
                 help_fg: Color::Rgb(253, 151, 31),      // Orange

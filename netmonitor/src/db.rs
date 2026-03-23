@@ -1,8 +1,8 @@
-use rusqlite::{params, Connection, Result};
-use std::path::Path;
-use chrono::{Utc, DateTime};
 use crate::app::{ProcessRow, TimeRange};
+use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, Result};
 use std::collections::HashMap;
+use std::path::Path;
 
 pub struct DbManager {
     conn: Connection,
@@ -54,7 +54,11 @@ impl DbManager {
         Ok(())
     }
 
-    pub fn get_aggregated_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<HashMap<u32, ProcessRow>> {
+    pub fn get_aggregated_stats(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<HashMap<u32, ProcessRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT 
                 p.pid, 
@@ -64,7 +68,7 @@ impl DbManager {
              FROM traffic_log tl
              JOIN processes p ON tl.pid = p.pid
              WHERE tl.timestamp BETWEEN ?1 AND ?2
-             GROUP BY tl.pid, p.name"
+             GROUP BY tl.pid, p.name",
         )?;
 
         let process_iter = stmt.query_map(params![start, end], |row| {
@@ -72,17 +76,20 @@ impl DbManager {
             let name: String = row.get(1)?;
             let total_up: u64 = row.get(2)?;
             let total_down: u64 = row.get(3)?;
-            
-            Ok((pid, ProcessRow {
+
+            Ok((
                 pid,
-                name,
-                context: crate::process::ProcessContext::Unknown,
-                up_bytes: total_up, 
-                down_bytes: total_down,
-                total_bytes: total_up + total_down,
-                last_up_bytes: 0,
-                last_down_bytes: 0,
-            }))
+                ProcessRow {
+                    pid,
+                    name,
+                    context: crate::process::ProcessContext::Unknown,
+                    up_bytes: total_up,
+                    down_bytes: total_down,
+                    total_bytes: total_up + total_down,
+                    last_up_bytes: 0,
+                    last_down_bytes: 0,
+                },
+            ))
         })?;
 
         let mut stats = HashMap::new();
@@ -93,20 +100,24 @@ impl DbManager {
         Ok(stats)
     }
 
-    pub fn get_traffic_history(&self, pid: u32, range: TimeRange) -> Result<Vec<(DateTime<Utc>, u64, u64)>> {
+    pub fn get_traffic_history(
+        &self,
+        pid: u32,
+        range: TimeRange,
+    ) -> Result<Vec<(DateTime<Utc>, u64, u64)>> {
         let now = Utc::now();
         let seconds = range.to_seconds();
         let start_time = now - chrono::Duration::seconds(seconds);
-        
+
         // Determine bucket size in seconds
         let bucket_size = match range {
             TimeRange::TenMinutes => 10,       // 10s buckets
-            TimeRange::OneHour => 60,         // 1m buckets
+            TimeRange::OneHour => 60,          // 1m buckets
             TimeRange::TwentyFourHours => 900, // 15m buckets
         };
 
         let start_ts = start_time.timestamp();
-        
+
         let mut stmt = self.conn.prepare(
             "SELECT 
                 ((strftime('%s', timestamp) - ?1) / ?2) * ?2 + ?1 as bucket_ts,
@@ -115,17 +126,18 @@ impl DbManager {
              FROM traffic_log
              WHERE pid = ?3 AND timestamp >= ?4
              GROUP BY bucket_ts
-             ORDER BY bucket_ts ASC"
+             ORDER BY bucket_ts ASC",
         )?;
 
-        let history_iter = stmt.query_map(params![start_ts, bucket_size, pid, start_time], |row| {
-            let ts_secs: i64 = row.get(0)?;
-            let up: u64 = row.get(1)?;
-            let down: u64 = row.get(2)?;
-            
-            let dt = DateTime::from_timestamp(ts_secs, 0).unwrap_or_else(|| Utc::now());
-            Ok((dt, up, down))
-        })?;
+        let history_iter =
+            stmt.query_map(params![start_ts, bucket_size, pid, start_time], |row| {
+                let ts_secs: i64 = row.get(0)?;
+                let up: u64 = row.get(1)?;
+                let down: u64 = row.get(2)?;
+
+                let dt = DateTime::from_timestamp(ts_secs, 0).unwrap_or_else(|| Utc::now());
+                Ok((dt, up, down))
+            })?;
 
         let mut results = Vec::new();
         for item in history_iter {
@@ -135,25 +147,28 @@ impl DbManager {
     }
 
     pub fn load_historical_stats(&self) -> Result<HashMap<u32, ProcessRow>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT pid, name, total_up, total_down FROM processes"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT pid, name, total_up, total_down FROM processes")?;
         let process_iter = stmt.query_map([], |row| {
             let pid: u32 = row.get(0)?;
             let name: String = row.get(1)?;
             let total_up: u64 = row.get(2)?;
             let total_down: u64 = row.get(3)?;
-            
-            Ok((pid, ProcessRow {
+
+            Ok((
                 pid,
-                name,
-                context: crate::process::ProcessContext::Unknown,
-                up_bytes: 0, // Reset for current session
-                down_bytes: 0,
-                total_bytes: total_up + total_down,
-                last_up_bytes: 0, // Should be updated by eBPF map on first tick
-                last_down_bytes: 0,
-            }))
+                ProcessRow {
+                    pid,
+                    name,
+                    context: crate::process::ProcessContext::Unknown,
+                    up_bytes: 0, // Reset for current session
+                    down_bytes: 0,
+                    total_bytes: total_up + total_down,
+                    last_up_bytes: 0, // Should be updated by eBPF map on first tick
+                    last_down_bytes: 0,
+                },
+            ))
         })?;
 
         let mut stats = HashMap::new();
@@ -175,12 +190,12 @@ impl DbManager {
                     name = excluded.name,
                     last_seen = excluded.last_seen,
                     total_up = total_up + excluded.total_up,
-                    total_down = total_down + excluded.total_down"
+                    total_down = total_down + excluded.total_down",
             )?;
-            
+
             let mut stmt_log = tx.prepare(
                 "INSERT INTO traffic_log (pid, timestamp, up_bytes, down_bytes)
-                 VALUES (?1, ?2, ?3, ?4)"
+                 VALUES (?1, ?2, ?3, ?4)",
             )?;
 
             for (pid, name, up_delta, down_delta) in data {
@@ -209,8 +224,9 @@ mod tests {
     #[test]
     fn test_save_and_load_stats() {
         let mut db = DbManager::new(":memory:").unwrap();
-        db.flush_batch(&[(1234, "test-proc".to_string(), 100, 200)]).unwrap();
-        
+        db.flush_batch(&[(1234, "test-proc".to_string(), 100, 200)])
+            .unwrap();
+
         let stats = db.load_historical_stats().unwrap();
         assert_eq!(stats.len(), 1);
         let row = stats.get(&1234).unwrap();
@@ -241,23 +257,35 @@ mod tests {
         let end = now;
 
         // Add some data
-        let mut stmt_proc = db.conn.prepare(
-            "INSERT INTO processes (pid, name, first_seen, last_seen, total_up, total_down)
-             VALUES (?1, ?2, ?3, ?3, ?4, ?5)"
-        ).unwrap();
+        let mut stmt_proc = db
+            .conn
+            .prepare(
+                "INSERT INTO processes (pid, name, first_seen, last_seen, total_up, total_down)
+             VALUES (?1, ?2, ?3, ?3, ?4, ?5)",
+            )
+            .unwrap();
         stmt_proc.execute(params![100, "proc1", now, 0, 0]).unwrap();
-        
-        let mut stmt_log = db.conn.prepare(
-            "INSERT INTO traffic_log (pid, timestamp, up_bytes, down_bytes)
-             VALUES (?1, ?2, ?3, ?4)"
-        ).unwrap();
-        
+
+        let mut stmt_log = db
+            .conn
+            .prepare(
+                "INSERT INTO traffic_log (pid, timestamp, up_bytes, down_bytes)
+             VALUES (?1, ?2, ?3, ?4)",
+            )
+            .unwrap();
+
         // Log inside range
-        stmt_log.execute(params![100, now - chrono::Duration::minutes(30), 100, 50]).unwrap();
-        stmt_log.execute(params![100, now - chrono::Duration::minutes(15), 200, 100]).unwrap();
-        
+        stmt_log
+            .execute(params![100, now - chrono::Duration::minutes(30), 100, 50])
+            .unwrap();
+        stmt_log
+            .execute(params![100, now - chrono::Duration::minutes(15), 200, 100])
+            .unwrap();
+
         // Log outside range
-        stmt_log.execute(params![100, now - chrono::Duration::hours(3), 500, 250]).unwrap();
+        stmt_log
+            .execute(params![100, now - chrono::Duration::hours(3), 500, 250])
+            .unwrap();
 
         let stats = db.get_aggregated_stats(start, end).unwrap();
         assert_eq!(stats.len(), 1);

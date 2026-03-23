@@ -2,8 +2,8 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
-use trust_dns_resolver::TokioAsyncResolver;
 use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+use trust_dns_resolver::TokioAsyncResolver;
 
 pub struct DnsResolver {
     resolver: TokioAsyncResolver,
@@ -13,10 +13,8 @@ pub struct DnsResolver {
 
 impl DnsResolver {
     pub fn new() -> Self {
-        let resolver = TokioAsyncResolver::tokio(
-            ResolverConfig::default(),
-            ResolverOpts::default(),
-        );
+        let resolver =
+            TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default());
 
         Self {
             resolver,
@@ -37,9 +35,10 @@ impl DnsResolver {
         // Perform reverse DNS lookup
         match self.resolver.reverse_lookup(ip).await {
             Ok(lookup) => {
-                let hostname = lookup.iter().next().map(|name| {
-                    name.to_utf8().trim_end_matches('.').to_string()
-                });
+                let hostname = lookup
+                    .iter()
+                    .next()
+                    .map(|name| name.to_utf8().trim_end_matches('.').to_string());
                 self.cache.insert(ip, (hostname.clone(), Instant::now()));
                 hostname
             }

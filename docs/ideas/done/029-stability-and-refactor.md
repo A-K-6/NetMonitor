@@ -43,19 +43,19 @@
 
 ## 3. Implementation Plan
 
-- [ ] **Step 1: Kernel Abstraction**
-    - [ ] Define `Collector` trait in a new `core` module.
-    - [ ] Move map-polling logic into `AyaCollector`.
-- [ ] **Step 2: Service Layer Extraction**
-    - [ ] Extract `ProcessResolver` and `DbManager` behind traits.
-    - [ ] Implement **Type-Driven** updates (e.g., using a `State` enum for UI).
-- [ ] **Step 3: Quality & Safety Audit**
-    - [ ] Audit and remove all `unwrap()`/`expect()`.
-    - [ ] Run `cargo clippy -- -D warnings` and fix all violations.
-    - [ ] Add doc-comments to all core modules.
-- [ ] **Step 4: Infrastructure Validation**
-    - [ ] Verify TUI boots via `MockCollector`.
-    - [ ] Enforce `cargo fmt` across the workspace.
+- [x] **Step 1: Kernel Abstraction**
+    - [x] Define `Collector` trait in a new `core` module.
+    - [x] Move map-polling logic into `AyaCollector`.
+- [x] **Step 2: Service Layer Extraction**
+    - [x] Extract `ProcessResolver` and `DbManager` behind traits.
+    - [x] Implement **Type-Driven** updates (e.g., using a `State` enum for UI).
+- [x] **Step 3: Quality & Safety Audit**
+    - [x] Audit and remove all `unwrap()`/`expect()`.
+    - [x] Run `cargo clippy -- -D warnings` and fix all violations.
+    - [x] Add doc-comments to all core modules.
+- [x] **Step 4: Infrastructure Validation**
+    - [x] Verify TUI boots via `MockCollector`.
+    - [x] Enforce `cargo fmt` across the workspace.
 
 ## 4. Verification & Testing
 - **Refactor Integrity:** No regression in bandwidth accuracy.

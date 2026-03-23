@@ -1,9 +1,13 @@
-use ratatui::widgets::{TableState, ListState};
-use std::collections::{HashMap, VecDeque, HashSet};
-use crate::theme::{Theme, ThemeType};
 use crate::config::Config;
+use crate::core::{
+    Bytes, Collector, EnforcementService, IdentityService, MonitoringService, Pid, Resolver,
+    TrafficService,
+};
 use crate::process::ProcessContext;
+use crate::theme::{Theme, ThemeType};
 use dark_light::Mode;
+use ratatui::widgets::{ListState, TableState};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub const MAX_HISTORY: usize = 100;
 
@@ -49,7 +53,7 @@ pub struct Alert {
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub pid: u32,
     pub process_name: String,
-    pub value: u64, // KB/s
+    pub value: u64,     // KB/s
     pub threshold: u64, // KB/s
 }
 
@@ -125,7 +129,8 @@ pub struct GraphSeries {
     pub data_down: Vec<(f64, f64)>,
 }
 
-pub struct App {
+pub struct App<C: Collector, R: Resolver> {
+    pub monitoring: MonitoringService<C, R>,
     pub view_mode: ViewMode,
     pub process_data: Vec<ProcessRow>,
     pub total_upload: u64,
@@ -149,7 +154,7 @@ pub struct App {
     pub threshold_input: String,
     pub throttle_input: String,
     pub thresholds: HashMap<u32, u64>, // PID -> KB/s
-    pub throttles: HashMap<u32, u64>, // PID -> KB/s
+    pub throttles: HashMap<u32, u64>,  // PID -> KB/s
     pub alerts: VecDeque<Alert>,
     pub graph_time_range: TimeRange,
     pub graph_series: Vec<GraphSeries>,
@@ -174,11 +179,18 @@ pub struct App {
     pub config: Config,
 }
 
-impl App {
-    pub fn new(historical_data: HashMap<u32, ProcessRow>, config: Config) -> Self {
+impl<C: Collector, R: Resolver> App<C, R> {
+    pub fn new(
+        monitoring: MonitoringService<C, R>,
+        historical_data: HashMap<u32, ProcessRow>,
+        config: Config,
+    ) -> Self {
         let mut theme_state = ListState::default();
         let themes = ThemeType::all();
-        let theme_idx = themes.iter().position(|t| *t == config.ui.theme).unwrap_or(0);
+        let theme_idx = themes
+            .iter()
+            .position(|t| *t == config.ui.theme)
+            .unwrap_or(0);
         theme_state.select(Some(theme_idx));
 
         let mut historical_range_state = ListState::default();
@@ -203,6 +215,7 @@ impl App {
         };
 
         Self {
+            monitoring,
             view_mode,
             process_data: Vec::new(),
             total_upload: 0,
@@ -226,7 +239,7 @@ impl App {
             threshold_input: String::new(),
             throttle_input: String::new(),
             thresholds: HashMap::new(), // Per-process thresholds could be loaded here too
-            throttles: HashMap::new(), // PID -> KB/s
+            throttles: HashMap::new(),  // PID -> KB/s
             alerts: VecDeque::with_capacity(MAX_HISTORY),
             graph_time_range: TimeRange::TenMinutes,
             graph_series: Vec::new(),
@@ -250,7 +263,9 @@ impl App {
             config,
         }
     }
+}
 
+impl<C: Collector, R: Resolver> App<C, R> {
     pub fn next(&mut self) {
         let i = match self.table_state.selected() {
             Some(i) => {

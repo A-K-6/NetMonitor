@@ -1,3 +1,16 @@
+2026-03-23 10:15 - Proposed Task 030: Final Polish, Technical Debt Cleanup & Architectural Validation.
+- Identified remaining linting warnings (unused imports, dead code) from the Phase 3 refactor.
+- Created `docs/ideas/todo/030-final-polish-and-cleanup.md` with a detailed roadmap for the next agent.
+- Documented the architectural recap and technical debt resolution strategy.
+
+2026-03-23 10:00 - Completed Task 029: Phase 3 Professional Review & Architectural Refactor.
+- Implemented `Collector` trait to abstract eBPF interaction from the TUI.
+- Created `AyaCollector` for real kernel monitoring and `MockCollector` for zero-dependency testing.
+- Introduced a modular Service Layer (`TrafficService`, `IdentityService`, `EnforcementService`, `MonitoringService`).
+- Refactored `App` to be generic and decoupled from the specific eBPF backend.
+- Standardized error handling with `thiserror` and established a `core` domain model.
+- Verified architecture with a new test suite and project-wide `cargo fmt` compliance.
+
 2026-03-22 18:45 - Proposed Task 029: Phase 3 Final Review & Stability Refactor.
 - Defined a new transitional task to consolidate Phase 3 features and refactor for Phase 4.
 - Added `docs/ideas/todo/029-stability-and-refactor.md`.

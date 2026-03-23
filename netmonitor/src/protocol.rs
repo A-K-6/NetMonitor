@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
 pub struct ProtocolResolver {
     services: HashMap<(u32, u16), &'static str>,
@@ -8,7 +8,7 @@ pub struct ProtocolResolver {
 impl ProtocolResolver {
     pub fn new() -> Self {
         let mut services = HashMap::new();
-        
+
         // Well-known TCP services (proto 6)
         services.insert((6, 22), "SSH");
         services.insert((6, 23), "Telnet");
@@ -25,7 +25,7 @@ impl ProtocolResolver {
         services.insert((6, 5432), "PostgreSQL");
         services.insert((6, 6379), "Redis");
         services.insert((6, 8080), "HTTP-Proxy");
-        
+
         // Well-known UDP services (proto 17)
         services.insert((17, 53), "DNS");
         services.insert((17, 67), "DHCP-Srv");
@@ -36,7 +36,7 @@ impl ProtocolResolver {
         services.insert((17, 514), "Syslog");
         services.insert((17, 1194), "OpenVPN");
         services.insert((17, 5353), "mDNS");
-        
+
         Self { services }
     }
 

@@ -1,6 +1,6 @@
-use std::net::IpAddr;
 use maxminddb::Reader;
 use once_cell::sync::Lazy;
+use std::net::IpAddr;
 
 // This will be a small dummy file if the real one isn't downloaded.
 // In a real build, we'd include the real MaxMind or DB-IP mmdb.

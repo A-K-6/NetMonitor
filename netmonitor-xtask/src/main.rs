@@ -1,6 +1,6 @@
-use std::process::Command;
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
+use std::process::Command;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -43,14 +43,19 @@ fn main() -> Result<()> {
 fn build_ebpf(_release: bool) -> Result<()> {
     // Check if bpf-linker is installed
     if !Command::new("bpf-linker").arg("--version").status().is_ok() {
-        return Err(anyhow!("bpf-linker not found. Please install it with 'cargo install bpf-linker'"));
+        return Err(anyhow!(
+            "bpf-linker not found. Please install it with 'cargo install bpf-linker'"
+        ));
     }
 
     let args = vec![
         "build",
-        "--package", "netmonitor-ebpf",
-        "--target", "bpfel-unknown-none",
-        "-Z", "build-std=core",
+        "--package",
+        "netmonitor-ebpf",
+        "--target",
+        "bpfel-unknown-none",
+        "-Z",
+        "build-std=core",
         "--release",
     ];
 
@@ -69,10 +74,7 @@ fn build_ebpf(_release: bool) -> Result<()> {
 fn run(release: bool) -> Result<()> {
     build_ebpf(release)?;
 
-    let mut build_args = vec![
-        "build",
-        "--package", "netmonitor",
-    ];
+    let mut build_args = vec!["build", "--package", "netmonitor"];
     if release {
         build_args.push("--release");
     }

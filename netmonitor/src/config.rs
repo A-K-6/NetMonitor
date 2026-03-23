@@ -1,9 +1,9 @@
-use serde::{Serialize, Deserialize};
+use crate::theme::ThemeType;
+use directories::ProjectDirs;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use directories::ProjectDirs;
-use crate::theme::ThemeType;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -43,12 +43,24 @@ pub struct AlertConfig {
     pub processes: HashMap<String, u64>,
 }
 
-fn default_theme() -> ThemeType { ThemeType::Auto }
-fn default_refresh_rate() -> u64 { 1000 }
-fn default_show_graph() -> bool { false }
-fn default_view() -> String { "Dashboard".to_string() }
-fn default_true() -> bool { true }
-fn default_threshold() -> u64 { 0 }
+fn default_theme() -> ThemeType {
+    ThemeType::Auto
+}
+fn default_refresh_rate() -> u64 {
+    1000
+}
+fn default_show_graph() -> bool {
+    false
+}
+fn default_view() -> String {
+    "Dashboard".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_threshold() -> u64 {
+    0
+}
 
 impl Default for Config {
     fn default() -> Self {

@@ -2,18 +2,19 @@
 #![no_main]
 
 use aya_ebpf::{
-    helpers::{bpf_get_current_pid_tgid, bpf_probe_read_kernel, bpf_ktime_get_ns},
-    macros::{kprobe, kretprobe, map, cgroup_skb},
+    helpers::{bpf_get_current_pid_tgid, bpf_ktime_get_ns, bpf_probe_read_kernel},
+    macros::{cgroup_skb, kprobe, kretprobe, map},
     maps::{HashMap, LruHashMap},
     programs::{ProbeContext, RetProbeContext, SkBuffContext},
 };
-use netmonitor_common::{ConnectionKey, TrafficStats, ThrottleConfig};
+use netmonitor_common::{ConnectionKey, ThrottleConfig, TrafficStats};
 
 #[map]
 static TRAFFIC_STATS: HashMap<u32, TrafficStats> = HashMap::with_max_entries(1024, 0);
 
 #[map]
-static CONNECTIONS: LruHashMap<ConnectionKey, TrafficStats> = LruHashMap::with_max_entries(10000, 0);
+static CONNECTIONS: LruHashMap<ConnectionKey, TrafficStats> =
+    LruHashMap::with_max_entries(10000, 0);
 
 #[map]
 static THROTTLE_CONFIG: HashMap<u32, ThrottleConfig> = HashMap::with_max_entries(1024, 0);
@@ -29,19 +30,20 @@ pub fn throttle_egress(ctx: SkBuffContext) -> i32 {
     }
 
     let len = ctx.len() as u64;
-    
+
     if let Some(config) = THROTTLE_CONFIG.get_ptr_mut(&pid) {
         let now = unsafe { bpf_ktime_get_ns() };
         unsafe {
             let elapsed_ns = now.saturating_sub((*config).last_refill_ts);
-            
+
             // rate is bytes/sec. elapsed_ns is nanoseconds.
             // tokens_to_add = (rate * elapsed_ns) / 1_000_000_000
             let rate = (*config).rate_bytes_per_sec;
             let tokens_to_add = (rate * elapsed_ns) / 1_000_000_000;
-            
+
             if tokens_to_add > 0 {
-                (*config).tokens = core::cmp::min((*config).bucket_size, (*config).tokens + tokens_to_add);
+                (*config).tokens =
+                    core::cmp::min((*config).bucket_size, (*config).tokens + tokens_to_add);
                 (*config).last_refill_ts = now;
             }
 
