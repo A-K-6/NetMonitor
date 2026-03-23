@@ -1,3 +1,10 @@
+2026-03-23 15:30 - Refined Idea 033: Background Daemon & Systemd Integration.
+- Updated `docs/ideas/todo/033-background-daemon-and-systemd.md` with technical refinements.
+- Added Task D (Database Concurrency) to include SQLite WAL mode for non-blocking TUI queries.
+- Added Task E (Signal Handling) for SIGTERM (graceful shutdown) and SIGHUP (config reload).
+- Refined Implementation Plan to include path resolution logic for `/var/lib/netmonitor/`.
+- Updated `xtask` plan to automate system user creation and directory provisioning.
+
 2026-03-23 15:10 - Completed Task 032: Headless Mode & Data Exporting.
 - Implemented `--headless` mode to run NetMonitor without the TUI.
 - Added `--output <format>` support for `json`, `csv`, and `plain` text snapshots.

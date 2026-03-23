@@ -26,19 +26,32 @@ Currently, NetMonitor only tracks and logs traffic when it is actively running i
 - **Default Path:** Set default logging to `/var/log/netmonitor/traffic.json` or similar.
 - **Permissions:** Ensure the daemon has write access to the logging directory.
 
-### Task D: Database Auto-Flush
+### Task D: Database Auto-Flush & Concurrency
 - Ensure the background service continuously flushes data to the SQLite database (`netmonitor.db`) for the TUI to read later (Historical View).
+- **SQLite WAL Mode:** Enable Write-Ahead Logging (`PRAGMA journal_mode=WAL`) to allow the TUI to perform historical queries without blocking the daemon's write operations.
+
+### Task E: Signal Handling & Lifecycle
+- **Graceful Shutdown (SIGTERM):** Implement a handler to ensure the final traffic batch is flushed to the database before the service exits.
+- **Config Reload (SIGHUP):** Support reloading the configuration file (e.g., to update alert thresholds) without restarting the entire service.
 
 ## 3. Implementation Plan
 
 1.  **Refactor Main:** Extract the "Headless Loop" logic into a reusable component that both the CLI and the Daemon can use.
-2.  **Add `--daemon` Flag:** Use the `daemonize` crate or manual fork to background the process.
-3.  **Create Systemd Template:** Add `resources/netmonitor.service` to the repository.
-4.  **Update Xtask:** Add a `cargo xtask install` command to help users set up the service, user, and permissions.
+2.  **Path Resolution Logic:** Implement a robust path resolver that defaults to `/var/lib/netmonitor/netmonitor.db` when running as a service, but allows overrides via config or CLI.
+3.  **Add `--daemon` Flag:** Use the `daemonize` crate or manual fork to background the process.
+4.  **Enable WAL Mode:** Update `DbManager` to initialize SQLite with WAL mode enabled.
+5.  **Implement Signal Listeners:** Use `tokio::signal::unix` to handle `SIGTERM` and `SIGHUP`.
+6.  **Create Systemd Template:** Add `resources/netmonitor.service` to the repository, utilizing `StandardOutput=journal` for operational logs and `AmbientCapabilities` for security.
+7.  **Update Xtask:** Add a `cargo xtask install` command to:
+    - Create the `netmonitor` system user/group.
+    - Provision `/var/lib/netmonitor/` and `/var/log/netmonitor/` with correct permissions.
+    - Install the binary to `/usr/local/bin/`.
+    - Deploy and enable the systemd service.
 
 ## 4. Verification Criteria
 - [ ] Running `systemctl start netmonitor` successfully initiates background tracking.
-- [ ] `journalctl -u netmonitor` shows startup logs and capability verification.
-- [ ] The TUI's "Historical View" shows data captured while the TUI was closed.
+- [ ] `journalctl -u netmonitor` shows startup logs, capability verification, and no database lock errors.
+- [ ] The TUI's "Historical View" shows data captured while the TUI was closed, even if the daemon is still writing.
+- [ ] Sending `SIGHUP` to the daemon reloads the configuration successfully.
 - [ ] The service survives a system reboot.
 - [ ] Memory usage remains stable over 24 hours of background operation.
