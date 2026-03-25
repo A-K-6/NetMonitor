@@ -128,18 +128,10 @@ fn install() -> Result<()> {
 
     println!("--- 4. Installing Binary ---");
     Command::new("sudo")
-        .args([
-            "cp",
-            "target/release/netmonitor",
-            "/usr/local/bin/netmonitor",
-        ])
+        .args(["cp", "target/release/netmonitor", "/usr/bin/netmonitor"])
         .status()?;
     Command::new("sudo")
-        .args([
-            "setcap",
-            "cap_net_admin,cap_bpf=ep",
-            "/usr/local/bin/netmonitor",
-        ])
+        .args(["setcap", "cap_net_admin,cap_bpf=ep", "/usr/bin/netmonitor"])
         .status()?;
 
     println!("--- 5. Deploying Systemd Service ---");

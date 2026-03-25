@@ -1,3 +1,9 @@
+2026-03-26 01:10 - Fixed Path Mismatch & Tagged v0.1.0-beta.2.
+- Updated `netmonitor-xtask/src/main.rs` to install the binary to `/usr/bin/netmonitor` instead of `/usr/local/bin/netmonitor`.
+- Corrected the binary location on the system and verified `netmonitor.service` is running successfully.
+- Incremented workspace version to `0.1.0-beta.2` for new release.
+- Ensured consistent path usage across `xtask`, `cargo-deb`, and systemd service configurations.
+
 2026-03-23 19:00 - Completed Task 035: Professional Man Pages & Technical Documentation.
 - Created `resources/netmonitor.1` Roff man page detailing CLI flags and TUI hotkeys.
 - Drafted `docs/man/netmonitor.1.md` as the source for the manual.
