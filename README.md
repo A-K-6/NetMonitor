@@ -3,6 +3,7 @@
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![eBPF](https://img.shields.io/badge/technology-eBPF-blue.svg)](https://ebpf.io/)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-green.svg)](LICENSE)
+[![Release](https://img.shields.io/badge/release-v0.1.0--beta.2-blue.svg)](https://github.com/A-K-6/NetMonitor/releases)
 
 **NetMonitor** is a high-performance, real-time network monitoring tool for Linux that leverages the power of **eBPF** for deep packet insights and **Rust** for a modern, secure Terminal User Interface (TUI).
 
@@ -23,7 +24,7 @@
 -   🚀 **Real-time Per-Process Tracking:** Monitor upload and download speeds per PID with sub-second precision.
 -   🔒 **eBPF Powered:** Deep kernel-level inspection of TCP, UDP, and RAW sockets with minimal CPU overhead (<1%).
 -   🛑 **Integrated Kill-Switch:** Terminate bandwidth-hogging processes directly from the UI (`k`).
--   📉 **Active Traffic Shaping:** Throttle specific processes to a defined KB/s limit (`b`).
+-   📉 **Active Traffic Shaping:** Throttle specific processes to a defined KB/s limit (`b`) using `cgroup_skb`.
 -   🌍 **Geo-IP & ASN Mapping:** Instantly identify where your traffic is going (e.g., "Slack -> AWS Ireland").
 -   🕵️ **Connection Deep-Dive:** Toggle detail view to see all active sockets, remote hostnames, and protocols for any process.
 -   📦 **Container & Service Context:** Automatically resolve Systemd services, Docker containers, and Kubernetes pods.
@@ -33,32 +34,34 @@
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Beta Release)
 
-### Installation
+NetMonitor is currently in **Beta (v0.1.0-beta.2)**. 
 
-Currently, NetMonitor is in active development. You can build it from source:
+### Recommended: Install via .deb (Debian/Ubuntu)
+
+Download the latest `.deb` package from the [Releases](https://github.com/A-K-6/NetMonitor/releases) page and install it:
 
 ```bash
-# Clone the repository
+sudo apt install ./netmonitor_0.1.0-beta.2_amd64.deb
+sudo systemctl start netmonitor
+```
+
+### Build & Install from Source
+
+Requires `bpf-linker`, `rustup` (nightly), and `libcap-dev`.
+
+```bash
+# Clone and build
 git clone https://github.com/A-K-6/NetMonitor.git
 cd NetMonitor
 
-# Build the project (requires bpf-linker)
-cargo xtask build-ebpf --release
-cargo build --release
-```
+# Use xtask to build and install (automatically handles capabilities and systemd)
+cargo xtask install
 
-### Granting Capabilities
-
-NetMonitor requires `CAP_BPF` and `CAP_NET_ADMIN` to load eBPF programs. You can run it with `sudo` or grant the binary persistent capabilities:
-
-```bash
-# Grant capabilities to the binary
-sudo setcap cap_net_admin,cap_bpf=ep ./target/release/netmonitor
-
-# Run it
-./target/release/netmonitor
+# Start the service or run manually
+sudo systemctl start netmonitor
+netmonitor
 ```
 
 ---
@@ -89,8 +92,8 @@ sudo setcap cap_net_admin,cap_bpf=ep ./target/release/netmonitor
 
 NetMonitor is split into three core components:
 
-1.  **`netmonitor-ebpf`**: The kernel-space logic. Uses `kprobes` on `tcp_sendmsg`, `udp_sendmsg`, and `raw_sendmsg` to capture traffic. It also uses `cgroup_skb` for traffic shaping.
-2.  **`netmonitor-common`**: Shared data structures between the kernel and userspace.
+1.  **`netmonitor-ebpf`**: The kernel-space logic. Uses `kprobes` on `tcp_sendmsg`, `udp_sendmsg`, and `raw_sendmsg` to capture traffic. It also uses `cgroup_skb` for granular traffic shaping.
+2.  **`netmonitor-common`**: Shared data structures between the kernel and userspace, including the Token Bucket Filter (TBF) logic.
 3.  **`netmonitor`**: The userspace Rust application. It manages the eBPF lifecycle using [Aya](https://aya-rs.dev/), resolves process metadata via `/proc`, and renders the UI using [Ratatui](https://ratatui.rs/).
 
 ---
@@ -120,7 +123,7 @@ default_threshold = 1024 # KB/s
 
 ## 🤝 Contributing
 
-We are currently in **Phase 3 (Advanced Features)** of our roadmap. Check out the [ROADMAP.md](docs/workflow/ROADMAP.md) for upcoming tasks. 
+We are in the **Stability & Testing (Phase 4)** of our roadmap. Check out the [ROADMAP.md](docs/workflow/ROADMAP.md) for upcoming tasks. 
 
 1.  Fork the repo
 2.  Create your feature branch (`git checkout -b feature/amazing-feature`)
