@@ -17,6 +17,14 @@
    > Real-time Bandwidth. Deep Insights. Zero Overhead.
 ```
 
+## 📸 Screenshots & Demo
+
+*(Insert High-Quality GIF or Screenshot here showing the Dashboard and Process Monitor in action)*
+`![NetMonitor Dashboard Demo](docs/assets/demo_dashboard.gif)`
+
+*(Insert High-Quality GIF or Screenshot here showing the Interactive Graph and Kill-Switch)*
+`![NetMonitor Graph Demo](docs/assets/demo_graph.gif)`
+
 ---
 
 ## ✨ Key Features
@@ -44,7 +52,17 @@ Download the latest `.deb` package from the [Releases](https://github.com/A-K-6/
 
 ```bash
 sudo apt install ./netmonitor_0.1.0-beta.2_amd64.deb
-sudo systemctl start netmonitor
+sudo systemctl enable --now netmonitor
+```
+
+### Static Binary (Musl)
+A fully static binary is provided in the releases for portability across different Linux distributions without relying on glibc:
+```bash
+wget https://github.com/A-K-6/NetMonitor/releases/download/v0.1.0-beta.2/netmonitor-x86_64-unknown-linux-musl.tar.gz
+tar -xzf netmonitor-x86_64-unknown-linux-musl.tar.gz
+sudo mv netmonitor /usr/local/bin/
+sudo setcap cap_sys_admin,cap_bpf,cap_net_admin,cap_perfmon+ep /usr/local/bin/netmonitor
+netmonitor
 ```
 
 ### Build & Install from Source
@@ -85,6 +103,25 @@ netmonitor
 | `a` | Set bandwidth **Alert** threshold |
 | `t` | Change **Theme** |
 | `?` | Show Help Overlay |
+
+### 🛠️ Advanced Usage Examples
+
+**1. Headless Exporting (JSON/CSV):**
+NetMonitor can be used without the TUI for scripting or integration with other tools (e.g., Prometheus).
+```bash
+# Output network stats in JSON format every 5 seconds, for 3 iterations
+netmonitor --headless --output json --interval 5 --count 3
+```
+
+**2. Identifying Bandwidth Hogs & Throttling:**
+- Open NetMonitor, press `Tab` to switch to the **Process Monitor**.
+- Press `s` repeatedly to sort by **Total** or **Down** rate.
+- Found the culprit? Press `b`, enter a limit like `500` (KB/s), and press `Enter` to throttle its traffic.
+- To view historical bandwidth for that process, press `g` to show the **Interactive Graph**.
+
+**3. Digging into Connections & Geo-IP:**
+- Select a process and press `Enter` to open the **Detail View**.
+- You will see exactly which IP addresses the process is connecting to, along with their resolved **Hostname**, **Country**, and **ISP/ASN** (e.g., `github.com (US - Microsoft)`).
 
 ---
 

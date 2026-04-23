@@ -33,6 +33,12 @@ jobs:
       - name: Install bpf-linker
         run: cargo install bpf-linker
 
+      - name: Install Musl Target
+        run: rustup target add x86_64-unknown-linux-musl
+
+      - name: Install Musl Tools
+        run: sudo apt-get install -y musl-tools
+
       - name: Run Fast Checks (Push)
         if: github.event_name == 'push'
         run: cargo xtask check
@@ -40,3 +46,9 @@ jobs:
       - name: Run Full Verification (Pull Request)
         if: github.event_name == 'pull_request'
         run: cargo xtask verify
+
+      - name: Build eBPF
+        run: cargo xtask build-ebpf --release
+
+      - name: Build Static Binary (Musl)
+        run: cargo build --package netmonitor --release --target x86_64-unknown-linux-musl
