@@ -71,8 +71,8 @@ This roadmap outlines the path from initial scaffolding to a production-ready Li
 - [ ] **Community Feedback Loop:** Establish a Beta/Release Candidate (RC) phase for real-world user feedback.
 - [ ] **Packaging Validation:** 
     - [ ] Verify `.deb` package installs across different Debian/Ubuntu versions.
-    - [ ] Test static binary portability.
-- [ ] **User Manual:** Finalize a compelling `README.md` with high-quality GIFs and usage examples.
+    - [x] Test static binary portability.
+- [x] **User Manual:** Finalize a compelling `README.md` with high-quality GIFs and usage examples.
 
 ## Phase 6: Hardening & Ecosystem
 *Goal: Long-term sustainability, security, and official stable release.*

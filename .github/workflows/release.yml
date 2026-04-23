@@ -38,8 +38,18 @@ jobs:
       - name: Build eBPF
         run: cargo xtask build-ebpf --release
 
-      - name: Build NetMonitor Binary
+      - name: Build NetMonitor Binary (Dynamically Linked)
         run: cargo build --package netmonitor --release
+
+      - name: Install Musl Target & Tools
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get install -y musl-tools
+
+      - name: Build NetMonitor Binary (Musl Static)
+        run: |
+          cargo build --package netmonitor --release --target x86_64-unknown-linux-musl
+          tar -czvf netmonitor-x86_64-unknown-linux-musl.tar.gz -C target/x86_64-unknown-linux-musl/release netmonitor
 
       - name: Build Debian Package
         run: |
@@ -52,5 +62,6 @@ jobs:
           files: |
             target/release/netmonitor
             target/debian/netmonitor_*.deb
+            netmonitor-x86_64-unknown-linux-musl.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
